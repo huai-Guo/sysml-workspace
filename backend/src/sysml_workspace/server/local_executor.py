@@ -76,13 +76,15 @@ class LocalExecutor:
                     "task_type": task,
                     "request": request_text,
                     "sysml_source": sysml_source,
-                    "run_timeout_seconds": 90,
+                    "run_timeout_seconds": 180,
                     "max_repair_count": 3,
                 })
                 result_source = state.get("sysml_source", "")
                 is_valid = state.get("valid", False)
                 diagnostics = state.get("diagnostics", [])
                 semantic_model = state.get("semantic_model")
+                run_status = state.get("run_status", "succeeded")
+                error_msg = state.get("error_message")
             else:
                 self.db.update_job_status(job_id, "running", "validating_sysml")
                 validation = await self.validator.validate(sysml_source)
@@ -100,6 +102,8 @@ class LocalExecutor:
                     for d in validation.diagnostics
                 ]
                 semantic_model = validation.semantic_model
+                run_status = "succeeded" if is_valid else "invalid"
+                error_msg = None
 
             # 2. Native Diagram Rendering
             diagram = None
@@ -124,13 +128,21 @@ class LocalExecutor:
                 "diagnostics": diagnostics,
                 "semantic_model": semantic_model,
                 "diagram": diagram,
-                "run_status": "succeeded",
+                "run_status": run_status,
+                "error_message": error_msg,
                 "request": request_text,
                 "requested_task": task,
                 "model_usage": [],
                 "entities": semantic_model.get("entities", []) if semantic_model else [],
             }
-            self.db.update_job_status(job_id, "succeeded", "completed", result=final_result)
+            job_status = "succeeded" if run_status in {"succeeded", "valid"} or is_valid else "failed"
+            self.db.update_job_status(
+                job_id,
+                job_status,
+                "completed" if job_status == "succeeded" else "failed",
+                result=final_result,
+                error_code=error_msg,
+            )
 
         except Exception as exc:
             log.exception(f"Job {job_id} failed: {exc}")

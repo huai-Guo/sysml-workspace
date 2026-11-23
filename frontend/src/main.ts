@@ -699,6 +699,11 @@ function notifyCopilotRunComplete(run: Run) {
       () => {
         void applySource(code, true);
         notice("已将最新代码同步至编辑器！");
+        if (run.result?.diagram) {
+          results.show(run);
+        } else {
+          void submitRun("render");
+        }
       },
       "btn-action-apply",
     );
@@ -706,6 +711,9 @@ function notifyCopilotRunComplete(run: Run) {
     const viewBtn = action(
       "📐 查看对应结构图",
       () => {
+        if (run.result) {
+          results.show(run);
+        }
         results.tab("diagram");
         results.setUpdateBadge("diagram", false);
       },
@@ -762,6 +770,13 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
   if (submitting || switching || !buffer || !sessionId) return;
   const task = overrideTask || buffer.value.draft.task;
   const req = overrideRequest !== undefined ? overrideRequest : buffer.value.draft.request;
+  if (!capabilities) {
+    try {
+      await refreshCapabilities();
+    } catch {
+      // proceed to check below
+    }
+  }
   if (!capabilities?.capabilities.includes(task)) {
     notice(messages.model_not_configured);
     return;

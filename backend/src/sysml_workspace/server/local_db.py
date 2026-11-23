@@ -142,6 +142,9 @@ class LocalDatabase:
     def authenticate_browser(self, session: str) -> Owner:
         return Owner("workspace", "developer")
 
+    def revoke_browser_session(self, session: str) -> None:
+        pass
+
     def authenticate(self, token: str) -> Owner:
         return Owner("workspace", "developer")
 

@@ -1034,6 +1034,26 @@ textarea::placeholder {
   padding: 4px 0 8px;
 }
 
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+}
+
+.wordmark svg {
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}
+
+.wordmark span {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .btn-new-thread {
   background: #1e2638;
   color: #38bdf8;

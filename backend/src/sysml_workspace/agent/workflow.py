@@ -31,6 +31,7 @@ from .prompts import (
     REVISION_SYSTEM_PROMPT,
     build_generation_prompt,
     build_repair_prompt,
+    build_revision_prompt,
 )
 from .source import normalize_model_source
 from .state import (
@@ -317,10 +318,17 @@ def build_sysml_graph(
                             ),
                             ModelMessage(
                                 role="user",
-                                content=build_repair_prompt(
-                                    request=state.get("request", ""),
-                                    source=state["sysml_source"],
-                                    diagnostics=state["diagnostics"],
+                                content=(
+                                    build_revision_prompt(
+                                        request=state.get("request", ""),
+                                        source=state["sysml_source"],
+                                    )
+                                    if initial_revision
+                                    else build_repair_prompt(
+                                        request=state.get("request", ""),
+                                        source=state["sysml_source"],
+                                        diagnostics=state["diagnostics"],
+                                    )
                                 ),
                             ),
                         ]

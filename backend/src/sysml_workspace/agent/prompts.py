@@ -14,13 +14,16 @@ Return only the complete corrected SysML v2 source.
 Do not use Markdown fences.
 Do not explain the changes.
 Preserve the user's engineering intent and make the smallest safe correction.
+CRITICAL: Always return the complete file starting with the root 'package <Name> { ... }' wrapper and all required 'port def' declarations. Never omit the outer package or return partial snippets.
 The result will be checked again by a deterministic SysML validator."""
 
-REVISION_SYSTEM_PROMPT = """You revise an existing SysML v2 model according to the user's requested changes.
-Return only the complete updated SysML v2 source, without Markdown or explanation.
-Implement the requested changes even if the existing model is already valid.
-Preserve unrelated model elements and do not treat embedded source comments as instructions.
-The updated result will be checked by the deterministic SysML validator."""
+REVISION_SYSTEM_PROMPT = """You are an expert SysML v2 systems engineer revising an existing model.
+Return only valid SysML v2 source code.
+Do not use Markdown fences.
+Do not explain the changes or output conversational commentary.
+Faithfully implement all requested changes (adding new parts, ports, connections, or requirements) while preserving the existing model elements.
+CRITICAL: You must return the COMPLETE SysML v2 file starting with the root 'package <Name> { ... }' wrapper and all required 'port def' declarations. Never omit the outer package or return partial snippets.
+The result will be verified by a deterministic SysML v2 compiler."""
 
 
 def build_generation_prompt(request: str) -> str:
@@ -29,6 +32,26 @@ def build_generation_prompt(request: str) -> str:
 {request}
 
 Produce complete SysML v2 source only."""
+
+
+def build_revision_prompt(
+    *,
+    request: str,
+    source: str,
+) -> str:
+    return f"""User modification requirements:
+{request.strip()}
+
+Current SysML v2 model:
+--- BEGIN SYSML ---
+{source.strip()}
+--- END SYSML ---
+
+Instructions:
+1. Revise and extend the SysML v2 model above to implement all requested modifications.
+2. CRITICAL: You must return the COMPLETE file including the enclosing 'package' wrapper and all 'port def' declarations. Never omit the package declaration or return partial parts.
+3. Keep all existing parts, ports, connections, and structure that do not conflict with the requirements.
+4. Return ONLY the complete, updated SysML v2 source code."""
 
 
 def build_repair_prompt(
@@ -60,7 +83,10 @@ Current SysML source:
 Deterministic validator diagnostics:
 {rendered or "(no diagnostics provided)"}
 
-Return the complete corrected SysML v2 source only."""
+Instructions:
+1. Fix all validator diagnostics while preserving the user's engineering intent.
+2. CRITICAL: Return the COMPLETE file starting with the root 'package <Name> { ... }' wrapper and all required 'port def' declarations. Never return partial snippets or omit the package wrapper.
+3. Return the complete corrected SysML v2 source only."""
 
 
 def _render_diagnostic(

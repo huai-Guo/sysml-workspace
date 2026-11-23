@@ -47,6 +47,10 @@ class OpenAICompatibleGateway(ModelGateway):
         if request.temperature is not None:
             payload["temperature"] = request.temperature
 
+        # For GLM / Volcengine models, disable runaway reasoning tokens so code generation is fast & complete
+        if "glm" in self._model.lower() or "volce" in getattr(self._http, "base_url", ""):
+            payload["thinking"] = {"type": "disabled"}
+
         data = await self._http.post("/chat/completions", payload)
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
@@ -59,11 +63,15 @@ class OpenAICompatibleGateway(ModelGateway):
         message = first.get("message")
         text = message.get("content") if isinstance(message, dict) else None
         if not isinstance(text, str) or not text.strip():
-            raise ModelResponseError(
-                "OpenAI-compatible response contained no text output."
-            )
+            reasoning = message.get("reasoning_content") if isinstance(message, dict) else None
+            if isinstance(reasoning, str) and reasoning.strip():
+                text = reasoning
+            else:
+                raise ModelResponseError(
+                    "OpenAI-compatible response contained no text output."
+                )
 
-        if first.get("finish_reason") in {"length", "content_filter", "tool_calls"}:
+        if first.get("finish_reason") in {"content_filter", "tool_calls"}:
             raise ModelResponseError("Provider returned incomplete or non-source output.")
         usage_data = data.get("usage") or {}
         if not isinstance(usage_data, dict):

@@ -18,7 +18,7 @@ class ModelGatewayConfig:
     base_url: str | None = None
     api_key: str | None = field(default=None, repr=False)
     timeout_seconds: float = 60.0
-    max_output_tokens: int = 4096
+    max_output_tokens: int = 8192
 
     def __post_init__(self) -> None:
         if self.provider not in SUPPORTED_PROVIDERS:
