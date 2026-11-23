@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "sysml-v2-release-2026-08-initial-candidates",
+  "purpose": "Pinned official-example candidates for deterministic validator evaluation.",
+  "corpus": {
+    "repository": "Systems-Modeling/SysML-v2-Release",
+    "tag": "2026-08",
+    "commit": "fb97b754f29588b8e9c7a35f370880cd15eb29e7",
+    "examplesRoot": "sysml/src/examples",
+    "rawBaseUrl": "https://raw.githubusercontent.com/Systems-Modeling/SysML-v2-Release/fb97b754f29588b8e9c7a35f370880cd15eb29e7/sysml/src/examples"
+  },
+  "validatorEnvironment": {
+    "repository": "Systems-Modeling/SysML-v2-Pilot-Implementation",
+    "tag": "2026-08",
+    "commit": "692170b71867353b8f90341e61556f49a5beb0e5",
+    "version": "0.62.0",
+    "javaMajorVersion": 21,
+    "standardLibrary": {
+      "path": "sysml.library",
+      "revision": "692170b71867353b8f90341e61556f49a5beb0e5"
+    }
+  },
+  "admissionPolicy": {
+    "positiveCandidateRule": "A candidate is admitted only after the pinned validator completes successfully with the required library environment and its exact source hash is recorded.",
+    "unmeasuredStatus": "pending_validation",
+    "engineeringSemanticReview": "not_run"
+  },
+  "fixtures": [
+    {
+      "id": "official-part-test",
+      "category": "single_file_positive_candidate",
+      "intendedStatus": "valid_if_admitted",
+      "admissionStatus": "pending_validation",
+      "split": "regression_candidate",
+      "coverage": ["parts", "ports", "attributes", "specialization"],
+      "sourceFiles": [
+        {
+          "path": "Simple Tests/PartTest.sysml",
+          "sourceSha256": "b1d1c29bd91810e0b3a84624419b8eccb2c8f5d8671c0a3d2bc7c75d98184f50",
+          "localPath": null,
+          "localArtifactSha256": null
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "standard_library",
+          "name": "SysML standard library",
+          "revision": "692170b71867353b8f90341e61556f49a5beb0e5",
+          "reason": "The example references ScalarValues::Integer."
+        }
+      ],
+      "notes": "Broad language candidate. Inspect actual diagnostics, including specialization constructs, before admission."
+    },
+    {
+      "id": "official-connection-test",
+      "category": "single_file_positive_candidate",
+      "intendedStatus": "valid_if_admitted",
+      "admissionStatus": "pending_validation",
+      "split": "regression_candidate",
+      "coverage": ["connections", "bindings", "connection_ends"],
+      "sourceFiles": [
+        {
+          "path": "Simple Tests/ConnectionTest.sysml",
+          "sourceSha256": "8b0046d8d2e221923adba78cbed8359fbdacb85e623cf9ed1abd5ba3c0e3c2a7",
+          "localPath": null,
+          "localArtifactSha256": null
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "standard_library",
+          "name": "SysML standard library",
+          "revision": "692170b71867353b8f90341e61556f49a5beb0e5",
+          "reason": "Run with the same pinned library environment as other validator fixtures."
+        }
+      ],
+      "notes": "Check whether this file is independently supported; if not, record a documented excerpt or dependency rather than silently changing the source."
+    },
+    {
+      "id": "official-hsuv-requirements",
+      "category": "single_file_positive_candidate",
+      "intendedStatus": "valid_if_admitted",
+      "admissionStatus": "pending_validation",
+      "split": "regression_candidate",
+      "coverage": ["requirements", "requirement_composition"],
+      "sourceFiles": [
+        {
+          "path": "Requirements Examples/HSUVRequirements.sysml",
+          "sourceSha256": "6058165ce64aca5aab73b9a09eaeec7519942510c91fe71b3990f7bf612cdcae",
+          "localPath": null,
+          "localArtifactSha256": null
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "standard_library_package",
+          "name": "Requirements",
+          "revision": "692170b71867353b8f90341e61556f49a5beb0e5",
+          "reason": "The source imports Requirements::*; resolve its definitions from the pinned standard library."
+        }
+      ],
+      "notes": "Record any unavailable definitions or unsupported library behavior as an admission result."
+    },
+    {
+      "id": "official-camera-project",
+      "category": "multi_file_project_candidate",
+      "intendedStatus": "valid_if_project_loaded",
+      "admissionStatus": "deferred_until_project_input_supported",
+      "split": "future_project_candidate",
+      "coverage": ["parts", "actions", "cross_file_imports"],
+      "sourceFiles": [
+        {
+          "path": "Camera Example/Camera.sysml",
+          "sourceSha256": "6ad1fad43c0fee8ca64ce01f7efb7b0477984711f4e59db85f801a8e56bd33bf",
+          "localPath": null,
+          "localArtifactSha256": null
+        },
+        {
+          "path": "Camera Example/PictureTaking.sysml",
+          "sourceSha256": "355a83a27952516c71ff6eb5a4a56354cf2ae9433f0e2ae5cc272bf27c6656ed",
+          "localPath": null,
+          "localArtifactSha256": null
+        }
+      ],
+      "dependencies": [
+        {
+          "kind": "companion_source_file",
+          "name": "PictureTaking",
+          "path": "Camera Example/PictureTaking.sysml",
+          "reason": "Camera.sysml imports PictureTaking::* from this companion file."
+        },
+        {
+          "kind": "standard_library",
+          "name": "SysML standard library",
+          "revision": "692170b71867353b8f90341e61556f49a5beb0e5",
+          "reason": "Use the same pinned library environment when project validation is supported."
+        }
+      ],
+      "notes": "Keep both files together. This is not an MVP single-file admission candidate."
+    }
+  ],
+  "acquisition": {
+    "mode": "manifest_only",
+    "instructions": "Fetch each sourceFiles[].path from corpus.rawBaseUrl at the pinned corpus commit, verify sourceSha256 before use, and record any extracted or mutated local artifact and its hash in a later fixture manifest revision.",
+    "vendoringNotice": "No upstream source files are copied into this repository by this manifest. If files are vendored later, retain applicable upstream license notices and provenance."
+  }
+}

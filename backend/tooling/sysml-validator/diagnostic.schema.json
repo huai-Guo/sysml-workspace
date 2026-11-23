@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/huai-Guo/sysml-agent/tooling/sysml-validator/diagnostic.schema.json",
+  "title": "SysML Validator Result",
+  "type": "object",
+  "required": ["validator", "valid", "diagnostics"],
+  "properties": {
+    "validator": {
+      "type": "object",
+      "required": ["name", "version", "tag"],
+      "properties": {
+        "name": { "const": "omg-sysml-v2-pilot" },
+        "version": { "const": "0.62.0" },
+        "tag": { "const": "2026-08" }
+      },
+      "additionalProperties": false
+    },
+    "valid": { "type": "boolean" },
+    "model": {
+      "type": "object",
+      "required": ["schema_version", "entities", "relations", "offset_encoding", "coverage"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "entities": { "type": "array", "maxItems": 5000, "items": { "type": "object" } },
+        "relations": { "type": "array", "maxItems": 10000, "items": { "type": "object" } },
+        "offset_encoding": { "const": "utf-16" },
+        "coverage": { "const": "authored_elements_and_semantic_relationships" }
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "severity",
+          "kind",
+          "message",
+          "line",
+          "column",
+          "offset",
+          "length",
+          "code",
+          "source"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info", "ignore"]
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["syntax", "semantic", "internal"]
+          },
+          "message": { "type": "string" },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "column": { "type": ["integer", "null"], "minimum": 1 },
+          "offset": { "type": ["integer", "null"], "minimum": 0 },
+          "length": { "type": ["integer", "null"], "minimum": 0 },
+          "code": { "type": ["string", "null"] },
+          "source": {
+            "type": "string",
+            "enum": ["omg-pilot", "sysml-agent-validator"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

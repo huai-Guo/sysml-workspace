@@ -1,0 +1,19 @@
+{
+  "name": "Systems-Modeling/SysML-v2-Pilot-Implementation",
+  "repository": "https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation.git",
+  "tag": "2026-08",
+  "commit": "692170b71867353b8f90341e61556f49a5beb0e5",
+  "libraryCommit": "692170b71867353b8f90341e61556f49a5beb0e5",
+  "pilotVersion": "0.62.0",
+  "javaVersion": 21,
+  "distribution": {
+    "asset": "jupyter-sysml-kernel-0.62.0.zip",
+    "url": "https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/releases/download/2026-08/jupyter-sysml-kernel-0.62.0.zip",
+    "sha256": "5a015ed3f2b3d2dae14e9c3fb9602d9e1fef5f9ce33cf396c422329405cc3cb2"
+  },
+  "runtimeJarPattern": "sysml/jupyter-sysml-kernel-*-all.jar",
+  "libraryPath": "sysml/sysml.library",
+  "entryPoint": "org.omg.sysml.interactive.SysMLInteractive",
+  "validationMethod": "process(String, boolean)",
+  "notes": "The official Jupyter kernel ZIP is used only as a signed/released binary carrier. sysml-agent does not start Jupyter; it invokes SysMLInteractive directly."
+}
