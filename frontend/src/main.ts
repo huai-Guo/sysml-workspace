@@ -866,8 +866,10 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
 
 function clearPrivateForms() {
   el<HTMLFormElement>("knowledge-form").reset();
-  for (const id of ["session-search", "entity-search", "modal-input", "file-input"])
-    el<HTMLInputElement>(id).value = "";
+  for (const id of ["session-search", "entity-search", "modal-input", "file-input"]) {
+    const input = optEl<HTMLInputElement>(id);
+    if (input) input.value = "";
+  }
   for (const id of ["documents", "modal-title", "modal-description", "modal-actions", "knowledge-error"])
     el(id).replaceChildren();
   documentAttempt = undefined;

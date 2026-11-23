@@ -75,7 +75,8 @@ export class Results {
         this.tab(tabs[next].dataset.tab!, true);
       };
     }
-    el("entity-search").oninput = () => this.entities();
+    const entitySearch = optEl("entity-search");
+    if (entitySearch) entitySearch.oninput = () => this.entities();
     el("apply-result").onclick = () =>
       this.apply(this.current?.result?.sysml_source || "");
     el("copy-result").onclick = () =>
@@ -261,63 +262,73 @@ export class Results {
     }
     const resHash = optEl("result-hash");
     if (resHash) resHash.textContent = result.final_artifact_sha256 ? `SHA-256 · ${result.final_artifact_sha256}` : "";
-    el("entity-count").textContent = String(
-      result.semantic_model?.entities.length || 0,
-    );
-    el("diagnostic-count").textContent = String(
-      result.diagnostics?.length || 0,
-    );
-    this.entities();
-    const diagnostics = el("diagnostics");
-    diagnostics.replaceChildren();
-    for (const d of result.diagnostics || []) {
-      const row = action(
-        "",
-        () => this.go(d),
-        `diagnostic ${d.severity === "warning" ? "warning" : ""}`,
-      );
-      row.append(
-        node("small", d.line ? `第 ${d.line} 行` : "诊断"),
-        node("span", d.message),
-      );
-      diagnostics.append(row);
+    const entityCountEl = optEl("entity-count");
+    if (entityCountEl) {
+      entityCountEl.textContent = String(result.semantic_model?.entities.length || 0);
     }
-    if (!result.diagnostics?.length)
-      diagnostics.append(
-        node(
-          "p",
-          result.valid
-            ? "没有语言诊断。"
-            : "本次未返回语言诊断，请查看任务状态。",
-          "panel-footnote",
-        ),
+    const diagCountEl = optEl("diagnostic-count");
+    if (diagCountEl) {
+      diagCountEl.textContent = String(result.diagnostics?.length || 0);
+    }
+    const diagCountCombo = optEl("diagnostic-count-combo");
+    if (diagCountCombo) {
+      diagCountCombo.textContent = String(result.diagnostics?.length || 0);
+    }
+    this.entities();
+    const diagnostics = optEl("diagnostics");
+    if (diagnostics) {
+      diagnostics.replaceChildren();
+      for (const d of result.diagnostics || []) {
+        const row = action(
+          "",
+          () => this.go(d),
+          `diagnostic ${d.severity === "warning" ? "warning" : ""}`,
+        );
+        row.append(
+          node("small", d.line ? `第 ${d.line} 行` : "诊断"),
+          node("span", d.message),
+        );
+        diagnostics.append(row);
+      }
+      if (!result.diagnostics?.length)
+        diagnostics.append(
+          node(
+            "p",
+            result.valid
+              ? "没有语言诊断。"
+              : "本次未返回语言诊断，请查看任务状态。",
+            "panel-footnote",
+          ),
+        );
+    }
+    const facts = optEl("run-facts");
+    if (facts) {
+      facts.replaceChildren();
+      const tokens = (result.model_usage || []).reduce(
+        (sum, c) => sum + (c.usage?.total_tokens || 0),
+        0,
       );
-    const facts = el("run-facts");
-    facts.replaceChildren();
-    const tokens = (result.model_usage || []).reduce(
-      (sum, c) => sum + (c.usage?.total_tokens || 0),
-      0,
-    );
-    const items = [
-      [
-        "语言验证",
-        result.validation_metadata?.duration_ms
-          ? `${(result.validation_metadata.duration_ms / 1000).toFixed(2)} 秒`
-          : "—",
-      ],
-      ["模型用量", tokens ? `${tokens} tokens` : "未报告 token 用量"],
-      ["会话记忆", result.memory?.included ? "已引用近期上下文" : "未引用"],
-      [
-        "检索证据",
-        result.evidence?.status === "unavailable"
-          ? "暂不可用"
-          : `${result.evidence?.citations?.length || 0} 条来源`,
-      ],
-    ];
-    for (const [label, value] of items) {
-      const card = node("div", "", "fact");
-      card.append(node("small", label), node("span", value));
-      facts.append(card);
+      const items = [
+        [
+          "语言验证",
+          result.validation_metadata?.duration_ms
+            ? `${(result.validation_metadata.duration_ms / 1000).toFixed(2)} 秒`
+            : "—",
+        ],
+        ["模型用量", tokens ? `${tokens} tokens` : "未报告 token 用量"],
+        ["会话记忆", result.memory?.included ? "已引用近期上下文" : "未引用"],
+        [
+          "检索证据",
+          result.evidence?.status === "unavailable"
+            ? "暂不可用"
+            : `${result.evidence?.citations?.length || 0} 条来源`,
+        ],
+      ];
+      for (const [label, value] of items) {
+        const card = node("div", "", "fact");
+        card.append(node("small", label), node("span", value));
+        facts.append(card);
+      }
     }
     for (const button of document.querySelectorAll<HTMLButtonElement>(
       "[data-download]",
@@ -328,22 +339,30 @@ export class Results {
           : button.dataset.download === "entities.json"
             ? !result.semantic_model
             : !result.valid;
-    el<HTMLButtonElement>("copy-result").disabled = !result.sysml_source;
-    el<HTMLButtonElement>("apply-result").disabled = !result.sysml_source;
+    const copyBtn = optEl<HTMLButtonElement>("copy-result");
+    if (copyBtn) copyBtn.disabled = !result.sysml_source;
+    const applyBtn = optEl<HTMLButtonElement>("apply-result");
+    if (applyBtn) applyBtn.disabled = !result.sysml_source;
     if (result.diagram?.svg) {
       if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
       this.imageUrl = URL.createObjectURL(
         new Blob([result.diagram.svg], { type: "image/svg+xml" }),
       );
-      const image = el<HTMLImageElement>("diagram-image");
-      image.src = this.imageUrl;
-      image.hidden = false;
-      el("diagram-empty").hidden = true;
-      el("diagram-viewport").classList.add("has-diagram");
+      const image = optEl<HTMLImageElement>("diagram-image");
+      if (image) {
+        image.src = this.imageUrl;
+        image.hidden = false;
+      }
+      const diagEmpty = optEl("diagram-empty");
+      if (diagEmpty) diagEmpty.hidden = true;
+      const diagViewport = optEl("diagram-viewport");
+      if (diagViewport) diagViewport.classList.add("has-diagram");
       this.fit = true;
       this.resize();
-      for (const id of ["zoom-in", "zoom-out", "zoom-fit"])
-        el<HTMLButtonElement>(id).disabled = false;
+      for (const id of ["zoom-in", "zoom-out", "zoom-fit"]) {
+        const zBtn = optEl<HTMLButtonElement>(id);
+        if (zBtn) zBtn.disabled = false;
+      }
       const cov = result.diagram.coverage;
       const diagSumm = optEl("diagram-summary");
       if (diagSumm) {
@@ -358,8 +377,10 @@ export class Results {
     }
   }
   private entities() {
-    const query = el<HTMLInputElement>("entity-search").value.toLowerCase();
-    const list = el("entities");
+    const searchInput = optEl<HTMLInputElement>("entity-search");
+    const query = searchInput ? searchInput.value.toLowerCase() : "";
+    const list = optEl("entities");
+    if (!list) return;
     list.replaceChildren();
     const values = (
       this.current?.result?.semantic_model?.entities || []
