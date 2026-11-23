@@ -236,56 +236,124 @@ export class LayoutManager {
       [this.editorPaneEl, this.viewPaneEl, this.copilotPaneEl].forEach((p) => {
         if (!p) return;
         if (p.id === maxId) {
+          p.hidden = false;
+          p.removeAttribute("hidden");
           p.style.display = "flex";
           p.style.flex = "1 1 100%";
         } else {
+          p.hidden = true;
           p.style.display = "none";
         }
       });
-      if (this.splitterMainCopilot) this.splitterMainCopilot.style.display = "none";
-      if (this.splitterEditorView) this.splitterEditorView.style.display = "none";
+      if (this.splitterMainCopilot) {
+        this.splitterMainCopilot.hidden = true;
+        this.splitterMainCopilot.style.display = "none";
+      }
+      if (this.splitterEditorView) {
+        this.splitterEditorView.hidden = true;
+        this.splitterEditorView.style.display = "none";
+      }
       if (this.mainColumnEl) {
-        this.mainColumnEl.style.display = maxId === "copilot-region" ? "none" : "flex";
-        this.mainColumnEl.style.flex = "1 1 100%";
+        if (maxId === "copilot-region") {
+          this.mainColumnEl.hidden = true;
+          this.mainColumnEl.style.display = "none";
+        } else {
+          this.mainColumnEl.hidden = false;
+          this.mainColumnEl.removeAttribute("hidden");
+          this.mainColumnEl.style.display = "flex";
+          this.mainColumnEl.style.flex = "1 1 100%";
+        }
       }
     } else {
       // Normal Mode
       // 1. Left vs Right Column layout
       if (hasLeftColumn && hasRight) {
+        this.mainColumnEl.hidden = false;
+        this.mainColumnEl.removeAttribute("hidden");
         this.mainColumnEl.style.display = "flex";
         this.mainColumnEl.style.flex = `0 0 ${this.state.ratioMainX}%`;
+
+        this.copilotPaneEl.hidden = false;
+        this.copilotPaneEl.removeAttribute("hidden");
         this.copilotPaneEl.style.display = "flex";
         this.copilotPaneEl.style.flex = "1 1 0";
-        if (this.splitterMainCopilot) this.splitterMainCopilot.style.display = "flex";
+
+        if (this.splitterMainCopilot) {
+          this.splitterMainCopilot.hidden = false;
+          this.splitterMainCopilot.removeAttribute("hidden");
+          this.splitterMainCopilot.style.display = "flex";
+        }
       } else if (hasLeftColumn && !hasRight) {
+        this.mainColumnEl.hidden = false;
+        this.mainColumnEl.removeAttribute("hidden");
         this.mainColumnEl.style.display = "flex";
         this.mainColumnEl.style.flex = "1 1 100%";
+
+        this.copilotPaneEl.hidden = true;
         this.copilotPaneEl.style.display = "none";
-        if (this.splitterMainCopilot) this.splitterMainCopilot.style.display = "none";
+
+        if (this.splitterMainCopilot) {
+          this.splitterMainCopilot.hidden = true;
+          this.splitterMainCopilot.style.display = "none";
+        }
       } else if (!hasLeftColumn && hasRight) {
+        this.mainColumnEl.hidden = true;
         this.mainColumnEl.style.display = "none";
+
+        this.copilotPaneEl.hidden = false;
+        this.copilotPaneEl.removeAttribute("hidden");
         this.copilotPaneEl.style.display = "flex";
         this.copilotPaneEl.style.flex = "1 1 100%";
-        if (this.splitterMainCopilot) this.splitterMainCopilot.style.display = "none";
+
+        if (this.splitterMainCopilot) {
+          this.splitterMainCopilot.hidden = true;
+          this.splitterMainCopilot.style.display = "none";
+        }
       }
 
       // 2. Left Column: Top vs Bottom Pane layout
       if (hasLeftTop && hasLeftBottom) {
+        this.editorPaneEl.hidden = false;
+        this.editorPaneEl.removeAttribute("hidden");
         this.editorPaneEl.style.display = "flex";
-        this.editorPaneEl.style.flex = `0 0 ${this.state.ratioLeftY}%`;
+        this.editorPaneEl.style.flex = `0 0 ${this.state.ratioLeftY || 50}%`;
+
+        this.viewPaneEl.hidden = false;
+        this.viewPaneEl.removeAttribute("hidden");
         this.viewPaneEl.style.display = "flex";
         this.viewPaneEl.style.flex = "1 1 0";
-        if (this.splitterEditorView) this.splitterEditorView.style.display = "flex";
+
+        if (this.splitterEditorView) {
+          this.splitterEditorView.hidden = false;
+          this.splitterEditorView.removeAttribute("hidden");
+          this.splitterEditorView.style.display = "flex";
+        }
       } else if (hasLeftTop && !hasLeftBottom) {
+        this.editorPaneEl.hidden = false;
+        this.editorPaneEl.removeAttribute("hidden");
         this.editorPaneEl.style.display = "flex";
         this.editorPaneEl.style.flex = "1 1 100%";
+
+        this.viewPaneEl.hidden = true;
         this.viewPaneEl.style.display = "none";
-        if (this.splitterEditorView) this.splitterEditorView.style.display = "none";
+
+        if (this.splitterEditorView) {
+          this.splitterEditorView.hidden = true;
+          this.splitterEditorView.style.display = "none";
+        }
       } else if (!hasLeftTop && hasLeftBottom) {
+        this.editorPaneEl.hidden = true;
         this.editorPaneEl.style.display = "none";
+
+        this.viewPaneEl.hidden = false;
+        this.viewPaneEl.removeAttribute("hidden");
         this.viewPaneEl.style.display = "flex";
         this.viewPaneEl.style.flex = "1 1 100%";
-        if (this.splitterEditorView) this.splitterEditorView.style.display = "none";
+
+        if (this.splitterEditorView) {
+          this.splitterEditorView.hidden = true;
+          this.splitterEditorView.style.display = "none";
+        }
       }
     }
 
@@ -452,13 +520,13 @@ export class LayoutManager {
         }
       }
 
-      // 2. Proximity check on bottom split zone (lower 35% of editor-region)
+      // 2. Proximity check on bottom split zone (lower 45% of editor-region when view-region is collapsed)
       if (!foundTarget && this.state.panes["view-region"].tabs.length === 0) {
         const editorPane = this.editorPaneEl;
         if (editorPane && editorPane.offsetParent !== null) {
           const rect = editorPane.getBoundingClientRect();
           const inHorizontal = clientX >= rect.left && clientX <= rect.right;
-          const inLowerHalf = clientY >= rect.top + rect.height * 0.65 && clientY <= rect.bottom;
+          const inLowerHalf = clientY >= rect.top + rect.height * 0.5 && clientY <= rect.bottom;
           if (inHorizontal && inLowerHalf) {
             foundTarget = { type: "split-bottom" };
           }
@@ -473,6 +541,17 @@ export class LayoutManager {
           const inVertical = clientY >= rect.top && clientY <= rect.bottom;
           if (inRightSide && inVertical) {
             foundTarget = { type: "split-right" };
+          }
+        }
+      }
+
+      // 4. Proximity fallback: over open view-region pane body
+      if (!foundTarget && this.state.panes["view-region"].tabs.length > 0) {
+        const viewPane = this.viewPaneEl;
+        if (viewPane && viewPane.offsetParent !== null) {
+          const rect = viewPane.getBoundingClientRect();
+          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+            foundTarget = { type: "merge", targetPaneId: "view-region", insertIndex: this.state.panes["view-region"].tabs.length };
           }
         }
       }
@@ -580,6 +659,7 @@ export class LayoutManager {
     // Place into view-region
     this.state.panes["view-region"].tabs.push(tabId);
     this.state.panes["view-region"].activeTab = tabId;
+    this.state.ratioLeftY = 50;
 
     this.saveState();
     this.apply();
