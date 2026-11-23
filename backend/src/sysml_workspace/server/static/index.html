@@ -18,25 +18,55 @@
     <div class="account"><span id="avatar" class="avatar">U</span><div><strong id="identity"></strong><small>个人工作空间</small></div><button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button></div>
   </aside>
   <div class="work-area">
-    <header class="app-header"><button id="toggle-sidebar" class="icon-button mobile-only" aria-label="展开模型列表" aria-expanded="false">☰</button><div class="breadcrumb"><span>模型</span><span class="slash">/</span><button id="rename-session" title="重命名模型">未命名模型</button></div><span id="save-state" class="save-state" role="status">已保存</span><button id="save-draft" class="button ghost compact">保存 <kbd>Ctrl S</kbd></button><button id="model-settings" class="icon-button" aria-label="模型设置" title="模型设置">⋯</button></header>
+    <header class="app-header">
+      <div class="header-left">
+        <button id="toggle-sidebar" class="icon-button btn-toggle-sidebar" title="展开/收起侧边栏" aria-label="展开/收起侧边栏">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm4 1H2v8h4V4zm1 8h7V4H7v8z"/></svg>
+        </button>
+        <div class="breadcrumb">
+          <span class="crumb-root">模型</span><span class="slash">/</span>
+          <button id="rename-session" title="点击或双击重命名模型">未命名模型</button>
+          <button id="btn-edit-title" class="icon-button edit-title-btn" title="重命名模型">✎</button>
+        </div>
+        <span id="save-state" class="save-state" role="status"><i class="save-dot"></i>已保存</span>
+      </div>
+
+      <div class="header-center">
+        <button id="render-run" class="btn-run-action" title="编译验证并渲染结构图 (Ctrl+Enter)">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M4 3l9 5-9 5V3z"/></svg>
+          <span>运行渲染</span>
+        </button>
+        <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M2 3h12v2H2zm0 4h8v2H2zm0 4h12v2H2z"/></svg>
+          <span>排版格式化</span>
+        </button>
+        <button id="save-draft" class="button ghost compact" title="保存草稿 (Ctrl+S)">保存</button>
+      </div>
+
+      <div class="header-right">
+        <button id="btn-layout-split" class="button ghost compact" title="切换分栏方向 (左右 / 上下)"></button>
+        <button id="btn-layout-reset" class="icon-button" title="重置分栏布局 (50/50)">↺</button>
+        <button id="open-knowledge" class="button ghost compact" title="工程规范与参考知识库">▤ 知识库</button>
+        <button id="open-status" class="button ghost compact"><i class="status-dot" id="service-dot"></i><span id="service-summary">服务状态</span></button>
+        <button id="model-settings" class="icon-button" aria-label="模型设置" title="模型设置">⋯</button>
+      </div>
+    </header>
     <div id="notice" class="notice" role="status" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="关闭提示">×</button></div>
     <div id="conflict" class="conflict-bar" role="alert" hidden><span>另一页面已更新此模型。本地修改仍保留。</span><button id="load-server" class="button secondary compact">载入服务器版本</button><button id="fork-draft" class="button primary compact">另存为新模型</button></div>
-    <div class="workbench">
+    <div class="workbench layout-row">
       <section class="editor-pane" id="editor-region" aria-label="模型编辑区">
         <div class="pane-heading">
-          <div><span class="small-label">MODEL</span><h2>模型编辑器</h2></div>
+          <div class="file-tab active">
+            <span class="file-icon">S</span><span>model.sysml</span>
+            <span id="draft-indicator" class="draft-indicator" hidden title="尚未保存">●</span>
+            <span class="language-badge">SysML v2</span>
+          </div>
           <div class="pane-actions">
-            <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">✨ 排版格式化</button>
-            <button id="render-run" class="button primary compact" title="验证代码并更新结构图 (Ctrl+Enter)">▶ 运行渲染</button>
-            <button id="import-source" class="button ghost compact">导入文件</button>
-            <button id="download-draft" class="button ghost compact">导出草稿</button>
+            <button id="import-source" class="button ghost compact" title="导入 .sysml 文件">导入</button>
+            <button id="download-draft" class="button ghost compact" title="导出当前代码">导出</button>
+            <button id="btn-maximize-editor" class="icon-button window-btn" title="最大化/还原编辑区">⤢</button>
             <input id="file-input" type="file" accept=".sysml,.txt" hidden>
           </div>
-        </div>
-        <div class="file-tab">
-          <span class="file-icon">S</span><span>model.sysml</span>
-          <span id="draft-indicator" class="draft-indicator" hidden title="尚未保存">●</span>
-          <span class="language-badge">SysML v2</span>
         </div>
         <div id="source-editor" class="source-editor"></div>
         <div class="editor-status">
@@ -69,20 +99,28 @@
         </div>
       </section>
 
-      <div id="pane-resizer" class="pane-resizer" title="按住左右拖动调整面板尺寸"></div>
+      <div id="pane-resizer" class="pane-resizer" title="按住拖拽调整面板尺寸，双击重置 (50%)"><span class="gutter-grip"></span></div>
 
       <section class="result-pane" aria-label="运行结果区">
         <div class="pane-heading">
-          <div><span class="small-label">INSPECT &amp; COPILOT</span><h2>渲染与洞察</h2></div>
-          <span id="run-status" class="status-badge neutral">尚未运行</span>
-        </div>
-        <div class="result-tabs" role="tablist" aria-label="结果视图">
-          <button role="tab" id="tab-button-diagram" data-tab="diagram" aria-selected="true" aria-controls="tab-diagram">📐 结构图 (View)</button>
-          <button role="tab" id="tab-button-copilot" data-tab="copilot" aria-selected="false" aria-controls="tab-copilot" tabindex="-1">🤖 AI 助手 (glm-5.3)</button>
-          <button role="tab" id="tab-button-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1">⚠️ 诊断 <span id="diagnostic-count">0</span></button>
-          <button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1" hidden>运行代码</button>
-          <button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1" hidden>实体 <span id="entity-count">0</span></button>
-          <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" hidden>运行记录</button>
+          <div class="result-tabs" role="tablist" aria-label="结果视图">
+            <button role="tab" id="tab-button-diagram" data-tab="diagram" aria-selected="true" aria-controls="tab-diagram">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M1 2h6v5H1zm8 0h6v3H9zm0 5h6v7H9zM1 9h6v5H1z"/></svg> 结构图 (View)
+            </button>
+            <button role="tab" id="tab-button-copilot" data-tab="copilot" aria-selected="false" aria-controls="tab-copilot" tabindex="-1">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 1a2 2 0 0 1 2 2v1h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V3a2 2 0 0 1 2-2zm-3 8a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm6 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg> AI 助手 (glm-5.3)
+            </button>
+            <button role="tab" id="tab-button-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg> 诊断 <span id="diagnostic-count">0</span>
+            </button>
+            <button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1" hidden>运行代码</button>
+            <button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1" hidden>实体 <span id="entity-count">0</span></button>
+            <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" hidden>运行记录</button>
+          </div>
+          <div class="result-actions">
+            <span id="run-status" class="status-badge neutral">就绪</span>
+            <button id="btn-maximize-result" class="icon-button window-btn" title="最大化/还原右侧区">⤢</button>
+          </div>
         </div>
         <div id="run-progress" class="run-progress" hidden>
           <span class="spinner" aria-hidden="true"></span>

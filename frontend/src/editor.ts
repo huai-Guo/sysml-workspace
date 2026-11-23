@@ -231,23 +231,41 @@ export class SourceEditor {
           onChange?.(update.state.doc.toString());
       }),
       EditorView.theme({
-        "&": { height: "100%", fontSize: "13px" },
+        "&": {
+          height: "100%",
+          fontSize: "13.5px",
+          backgroundColor: "#141721",
+          color: "#e2e8f0",
+        },
         ".cm-scroller": {
           overflow: "auto",
-          fontFamily: '"Cascadia Code",Consolas,monospace',
+          fontFamily: '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
           lineHeight: "1.75",
         },
-        ".cm-content": { padding: "18px 0" },
+        ".cm-content": { padding: "14px 0" },
         ".cm-line": { paddingLeft: "14px" },
         ".cm-gutters": {
-          backgroundColor: "#f8fafc",
-          color: "#8b96a8",
-          borderRight: "1px solid #edf0f4",
+          backgroundColor: "#0f121a",
+          color: "#4b5563",
+          borderRight: "1px solid #232838",
         },
-        ".cm-activeLine": { backgroundColor: "#eef7f5" },
-        ".cm-activeLineGutter": { backgroundColor: "#e5f0ed" },
+        ".cm-activeLine": { backgroundColor: "#1c2130" },
+        ".cm-activeLineGutter": {
+          backgroundColor: "#1a1f2e",
+          color: "#94a3b8",
+        },
         "&.cm-focused": { outline: "none" },
-        ".cm-cursor": { borderLeftColor: "#167c68" },
+        ".cm-cursor": {
+          borderLeftColor: "#38bdf8",
+          borderLeftWidth: "2px",
+        },
+        ".cm-selectionBackground, ::selection": {
+          backgroundColor: "#2563eb40 !important",
+        },
+        ".cm-keyword": { color: "#38bdf8", fontWeight: "600" },
+        ".cm-string": { color: "#6ee7b7" },
+        ".cm-number": { color: "#fbbf24" },
+        ".cm-comment": { color: "#64748b", fontStyle: "italic" },
       }),
     ];
     this.view = new EditorView({

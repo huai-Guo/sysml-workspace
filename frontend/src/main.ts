@@ -1,4 +1,5 @@
 import "./workbench.css";
+import { LayoutManager } from "./layout";
 import { ApiClient, ApiError, messages } from "./api";
 import {
   DraftBuffer,
@@ -1125,43 +1126,11 @@ el("render-run").onclick = () => {
 el("btn-quick-render").onclick = () => {
   void submitRun("render");
 };
-
-function initResizer() {
-  const resizer = el("pane-resizer");
-  const editorPane = document.querySelector<HTMLElement>(".editor-pane");
-  const workspaceBody = document.querySelector<HTMLElement>(".workspace-body");
-  if (!resizer || !editorPane || !workspaceBody) return;
-
-  let isDragging = false;
-
-  resizer.addEventListener("mousedown", () => {
-    isDragging = true;
-    resizer.classList.add("dragging");
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  });
-
-  window.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const bodyRect = workspaceBody.getBoundingClientRect();
-    const newWidth = e.clientX - bodyRect.left;
-    const minWidth = 280;
-    const maxWidth = bodyRect.width - 280;
-    if (newWidth >= minWidth && newWidth <= maxWidth) {
-      const percentage = (newWidth / bodyRect.width) * 100;
-      editorPane.style.flex = `0 0 ${percentage}%`;
-    }
-  });
-
-  window.addEventListener("mouseup", () => {
-    if (isDragging) {
-      isDragging = false;
-      resizer.classList.remove("dragging");
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-  });
+const editTitleBtn = document.getElementById("btn-edit-title");
+if (editTitleBtn) {
+  editTitleBtn.onclick = () => el("rename-session").click();
 }
+const layoutManager = new LayoutManager();
 
 function initCopilot() {
   const chat = el("copilot-chat");
@@ -1249,7 +1218,7 @@ document.addEventListener("visibilitychange", () => {
 });
 results.reset();
 updateControls();
-initResizer();
+layoutManager.init();
 initCopilot();
 void api
   .json<Identity>("/v1/auth/session")
