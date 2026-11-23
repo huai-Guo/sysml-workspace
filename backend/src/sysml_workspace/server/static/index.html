@@ -311,11 +311,13 @@
               <div id="stale-result" class="stale-result" hidden>草稿已修改 · 当前视图仍对应上次运行的代码</div>
               <div id="result-error" class="result-error" role="alert" hidden></div>
 
-              <div id="tab-diagnostics" class="diagnostics-viewport" role="region" aria-label="运行诊断与质量报告">
-                <div id="quality" class="quality"></div>
+              <div id="tab-diagnostics" class="diagnostics-viewport" role="region" aria-label="控制台与运行诊断">
+                <div id="quality" class="console-summary-card"></div>
+                <div class="console-section-title">编译与代码诊断 (Diagnostics)</div>
                 <div id="diagnostics" class="diagnostic-list"></div>
-                <div id="run-facts" class="run-facts"></div>
-                <details class="trace-details"><summary>执行阶段与来源</summary><ol id="timeline"></ol><p id="run-reference" class="mono"></p></details>
+                <div class="console-section-title">运行资源与性能指标 (Performance & Usage)</div>
+                <div id="run-facts" class="console-stats-grid"></div>
+                <details class="trace-details"><summary>执行阶段与追溯信息</summary><ol id="timeline"></ol><p id="run-reference" class="mono"></p></details>
               </div>
 
               <!-- Compatibility hidden tabs for results.ts and history -->

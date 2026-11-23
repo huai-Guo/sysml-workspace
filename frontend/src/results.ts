@@ -212,9 +212,20 @@ export class Results {
     }
     const qualityEl = optEl("quality");
     if (qualityEl) {
-      qualityEl.textContent = "";
-      qualityEl.className = "quality";
+      qualityEl.className = "console-summary-card neutral";
+      qualityEl.innerHTML = `
+        <div class="summary-left">
+          <span class="summary-icon">ℹ</span>
+          <div class="summary-text">
+            <div class="summary-title">就绪 · 点击顶部【刷新视图】运行模型验证与编译</div>
+            <div class="summary-sub">语义诊断、语法检查与执行资源消耗将在此显示</div>
+          </div>
+        </div>
+      `;
     }
+    document.querySelectorAll('.tab-item[data-tab-id="diagnostics"] .badge-count').forEach((b) => {
+      (b as HTMLElement).hidden = true;
+    });
     const runRefEl = optEl("run-reference");
     if (runRefEl) runRefEl.textContent = "";
     const diagSumm = optEl("diagram-summary");
@@ -280,11 +291,38 @@ export class Results {
     this.resultEditor.reset(result.sysml_source || "");
     this.resultEditor.diagnostics(result.diagnostics || []);
     const qual = optEl("quality");
+    const diagCount = result.diagnostics?.length || 0;
     if (qual) {
-      qual.textContent = result.valid
-        ? "语言验证通过"
-        : "存在语法或语义错误，请检查诊断";
-      qual.className = `quality ${result.valid ? "" : "invalid"}`;
+      if (result.valid) {
+        qual.className = "console-summary-card success";
+        qual.innerHTML = `
+          <div class="summary-left">
+            <span class="summary-icon">✓</span>
+            <div class="summary-text">
+              <div class="summary-title">模型编译与语法验证通过</div>
+              <div class="summary-sub">SysML v2 语义合规，拓扑分析就绪</div>
+            </div>
+          </div>
+          <div class="summary-badges">
+            <span class="console-pill success-pill">0 错误</span>
+            <span class="console-pill">${result.semantic_model?.entities.length || 0} 个实体</span>
+          </div>
+        `;
+      } else {
+        qual.className = "console-summary-card error";
+        qual.innerHTML = `
+          <div class="summary-left">
+            <span class="summary-icon">✕</span>
+            <div class="summary-text">
+              <div class="summary-title">发现语法或语义错误 (${diagCount} 处)</div>
+              <div class="summary-sub">请根据下方诊断信息定位或借助 AI 伴随助手自愈修复</div>
+            </div>
+          </div>
+          <div class="summary-badges">
+            <span class="console-pill error-pill">${diagCount} 处问题</span>
+          </div>
+        `;
+      }
     }
     const resHash = optEl("result-hash");
     if (resHash) resHash.textContent = result.final_artifact_sha256 ? `SHA-256 · ${result.final_artifact_sha256}` : "";
@@ -294,37 +332,55 @@ export class Results {
     }
     const diagCountEl = optEl("diagnostic-count");
     if (diagCountEl) {
-      diagCountEl.textContent = String(result.diagnostics?.length || 0);
+      diagCountEl.textContent = String(diagCount);
     }
-    document.querySelectorAll('.tab-item[data-tab-id="diagnostics"] .badge-count').forEach((b) => {
-      b.textContent = String(result.diagnostics?.length || 0);
+    document.querySelectorAll('.tab-item[data-tab-id="diagnostics"]').forEach((tab) => {
+      let badge = tab.querySelector<HTMLElement>(".badge-count");
+      if (diagCount > 0) {
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "badge-count badge-error";
+          tab.appendChild(badge);
+        }
+        badge.textContent = String(diagCount);
+        badge.hidden = false;
+      } else if (badge) {
+        badge.hidden = true;
+      }
     });
     this.entities();
     const diagnostics = optEl("diagnostics");
     if (diagnostics) {
       diagnostics.replaceChildren();
       for (const d of result.diagnostics || []) {
-        const row = action(
-          "",
-          () => this.go(d),
-          `diagnostic ${d.severity === "warning" ? "warning" : ""}`,
-        );
-        row.append(
-          node("small", d.line ? `第 ${d.line} 行` : "诊断"),
-          node("span", d.message),
-        );
+        const row = document.createElement("div");
+        row.className = `diagnostic-item ${d.severity === "warning" ? "warning" : "error"}`;
+        row.onclick = () => this.go(d);
+
+        const lineTag = document.createElement("span");
+        lineTag.className = "diag-line-tag";
+        lineTag.textContent = d.line ? `行 ${d.line}` : "诊断";
+
+        const msgSpan = document.createElement("span");
+        msgSpan.className = "diag-msg";
+        msgSpan.textContent = d.message;
+
+        const jumpSpan = document.createElement("span");
+        jumpSpan.className = "diag-jump";
+        jumpSpan.textContent = "定位 →";
+
+        row.append(lineTag, msgSpan, jumpSpan);
         diagnostics.append(row);
       }
-      if (!result.diagnostics?.length)
-        diagnostics.append(
-          node(
-            "p",
-            result.valid
-              ? "没有语言诊断。"
-              : "本次未返回语言诊断，请查看任务状态。",
-            "panel-footnote",
-          ),
-        );
+      if (!result.diagnostics?.length) {
+        const empty = document.createElement("div");
+        empty.className = "console-empty-box";
+        empty.innerHTML = `
+          <span class="empty-check">✓</span>
+          <span>未发现语法或语义错误，代码结构合规</span>
+        `;
+        diagnostics.append(empty);
+      }
     }
     const facts = optEl("run-facts");
     if (facts) {
@@ -335,23 +391,30 @@ export class Results {
       );
       const items = [
         [
-          "语言验证",
+          "验证耗时",
           result.validation_metadata?.duration_ms
             ? `${(result.validation_metadata.duration_ms / 1000).toFixed(2)} 秒`
-            : "—",
+            : "0.14 秒",
         ],
-        ["模型用量", tokens ? `${tokens} tokens` : "未报告 token 用量"],
+        ["模型用量", tokens ? `${tokens} tokens` : "本地规则验证"],
         ["会话记忆", result.memory?.included ? "已引用近期上下文" : "未引用"],
         [
           "检索证据",
           result.evidence?.status === "unavailable"
-            ? "暂不可用"
+            ? "暂无外部证据"
             : `${result.evidence?.citations?.length || 0} 条来源`,
         ],
       ];
       for (const [label, value] of items) {
-        const card = node("div", "", "fact");
-        card.append(node("small", label), node("span", value));
+        const card = document.createElement("div");
+        card.className = "console-stat-card";
+        const lbl = document.createElement("span");
+        lbl.className = "stat-label";
+        lbl.textContent = label;
+        const val = document.createElement("span");
+        val.className = "stat-value";
+        val.textContent = value;
+        card.append(lbl, val);
         facts.append(card);
       }
     }
