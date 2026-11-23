@@ -23,23 +23,153 @@
     <div id="conflict" class="conflict-bar" role="alert" hidden><span>另一页面已更新此模型。本地修改仍保留。</span><button id="load-server" class="button secondary compact">载入服务器版本</button><button id="fork-draft" class="button primary compact">另存为新模型</button></div>
     <div class="workbench">
       <section class="editor-pane" id="editor-region" aria-label="模型编辑区">
-        <div class="pane-heading"><div><span class="small-label">MODEL</span><h2>模型编辑器</h2></div><div class="pane-actions"><button id="import-source" class="button ghost compact">导入文件</button><button id="download-draft" class="button ghost compact">导出草稿</button><input id="file-input" type="file" accept=".sysml,.txt" hidden></div></div>
-        <div class="file-tab"><span class="file-icon">S</span><span>model.sysml</span><span id="draft-indicator" class="draft-indicator" hidden title="尚未保存">●</span><span class="language-badge">SysML v2</span></div>
+        <div class="pane-heading">
+          <div><span class="small-label">MODEL</span><h2>模型编辑器</h2></div>
+          <div class="pane-actions">
+            <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">✨ 格式化</button>
+            <button id="render-run" class="button primary compact" title="验证代码并更新结构图 (Ctrl+Enter)">▶ 运行渲染</button>
+            <button id="import-source" class="button ghost compact">导入文件</button>
+            <button id="download-draft" class="button ghost compact">导出草稿</button>
+            <input id="file-input" type="file" accept=".sysml,.txt" hidden>
+          </div>
+        </div>
+        <div class="file-tab">
+          <span class="file-icon">S</span><span>model.sysml</span>
+          <span id="draft-indicator" class="draft-indicator" hidden title="尚未保存">●</span>
+          <span class="language-badge">SysML v2</span>
+        </div>
         <div id="source-editor" class="source-editor"></div>
-        <div class="editor-status"><span id="source-count">0 行 · UTF-8</span><button id="load-example" class="text-button">插入电力系统示例</button><span>Ctrl ↵ 运行</span></div>
-        <div class="composer"><div class="composer-heading"><label for="task">本次操作</label><select id="task"><option value="render">生成结构图</option><option value="validate">验证代码</option><option value="extract">提取实体</option><option value="generate">自然语言生成</option><option value="revise">按需求修改</option><option value="repair">修复错误代码</option></select></div><div id="prompt-area" hidden><label for="prompt" id="prompt-label">工程需求</label><textarea id="prompt" maxlength="12000" rows="3" placeholder="描述组成、属性、端口和连接关系…"></textarea></div><div class="composer-footer"><label id="render-option" class="check"><input id="render" type="checkbox" checked>同时生成结构图</label><span id="capability-note" class="muted"></span><button id="submit" class="button primary">运行 <span aria-hidden="true">→</span></button></div></div>
+        <div class="editor-status">
+          <span id="source-count">0 行 · UTF-8</span>
+          <span class="editor-shortcuts-hint"><kbd>Shift+Alt+F</kbd> 排版 · <kbd>Ctrl+/</kbd> 注释 · <kbd>Ctrl+↵</kbd> 运行</span>
+          <button id="load-example" class="text-button">插入电力系统示例</button>
+        </div>
+        <!-- Hidden underlying form for state backwards-compatibility -->
+        <div class="composer" hidden>
+          <div class="composer-heading">
+            <label for="task">本次操作</label>
+            <select id="task">
+              <option value="render" selected>生成结构图</option>
+              <option value="validate">验证代码</option>
+              <option value="extract">提取实体</option>
+              <option value="generate">自然语言生成</option>
+              <option value="revise">按需求修改</option>
+              <option value="repair">修复错误代码</option>
+            </select>
+          </div>
+          <div id="prompt-area" hidden>
+            <label for="prompt" id="prompt-label">工程需求</label>
+            <textarea id="prompt" maxlength="12000" rows="3" placeholder="描述组成、属性、端口和连接关系…"></textarea>
+          </div>
+          <div class="composer-footer">
+            <label id="render-option" class="check"><input id="render" type="checkbox" checked>同时生成结构图</label>
+            <span id="capability-note" class="muted"></span>
+            <button id="submit" class="button primary">运行 <span aria-hidden="true">→</span></button>
+          </div>
+        </div>
       </section>
+
+      <div id="pane-resizer" class="pane-resizer" title="按住左右拖动调整面板尺寸"></div>
+
       <section class="result-pane" aria-label="运行结果区">
-        <div class="pane-heading"><div><span class="small-label">INSPECT</span><h2>预览与检查</h2></div><span id="run-status" class="status-badge neutral">尚未运行</span></div>
-        <div class="result-tabs" role="tablist" aria-label="结果视图"><button role="tab" id="tab-button-diagram" data-tab="diagram" aria-selected="true" aria-controls="tab-diagram">结构图</button><button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1">运行代码</button><button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1">实体 <span id="entity-count">0</span></button><button role="tab" id="tab-button-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1">诊断 <span id="diagnostic-count">0</span></button><button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1">运行记录</button></div>
-        <div id="run-progress" class="run-progress" hidden><span class="spinner" aria-hidden="true"></span><div><strong id="phase-label">已加入队列</strong><small id="run-elapsed"></small></div><button id="cancel-run" class="button secondary compact">取消任务</button><button id="retry-poll" class="button secondary compact" hidden>重新连接</button></div>
+        <div class="pane-heading">
+          <div><span class="small-label">INSPECT &amp; COPILOT</span><h2>渲染与洞察</h2></div>
+          <span id="run-status" class="status-badge neutral">尚未运行</span>
+        </div>
+        <div class="result-tabs" role="tablist" aria-label="结果视图">
+          <button role="tab" id="tab-button-diagram" data-tab="diagram" aria-selected="true" aria-controls="tab-diagram">📐 结构图 (View)</button>
+          <button role="tab" id="tab-button-copilot" data-tab="copilot" aria-selected="false" aria-controls="tab-copilot" tabindex="-1">🤖 AI 助手 (glm-5.3)</button>
+          <button role="tab" id="tab-button-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1">⚠️ 诊断 <span id="diagnostic-count">0</span></button>
+          <button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1" style="display:none;">运行代码</button>
+          <button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1" style="display:none;">实体 <span id="entity-count">0</span></button>
+          <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" style="display:none;">运行记录</button>
+        </div>
+        <div id="run-progress" class="run-progress" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <div><strong id="phase-label">已加入队列</strong><small id="run-elapsed"></small></div>
+          <button id="cancel-run" class="button secondary compact">取消任务</button>
+          <button id="retry-poll" class="button secondary compact" hidden>重新连接</button>
+        </div>
         <div id="stale-result" class="stale-result" hidden>草稿已修改 · 当前预览仍对应上次运行的代码</div>
         <div id="result-error" class="result-error" role="alert" hidden></div>
-        <div id="tab-diagram" class="result-tab diagram-tab" role="tabpanel" aria-labelledby="tab-button-diagram"><div class="diagram-toolbar"><span id="diagram-summary">语义结构概览</span><div><button id="zoom-out" class="icon-button" aria-label="缩小图片">−</button><button id="zoom-fit" class="button ghost compact">适应画布</button><button id="zoom-in" class="icon-button" aria-label="放大图片">＋</button><button data-download="diagram.svg" class="button secondary compact" disabled>下载 SVG</button></div></div><div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="结构图画布，可拖动和滚动"><img id="diagram-image" alt="已验证 SysML 的语义结构图" hidden><div id="diagram-empty" class="empty-state"><svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg><h3>从一份模型，看清系统结构</h3><p>在左侧编写或导入 SysML，然后生成结构图。<br>也可以从一个电力系统示例开始。</p><button id="empty-example" class="button secondary">打开示例模型 <span aria-hidden="true">↗</span></button></div></div><div id="diagram-coverage" class="panel-footnote">仅显示已解析的语义结构；不是所有 SysML 图种。</div></div>
-        <div id="tab-code" class="result-tab" role="tabpanel" aria-labelledby="tab-button-code" hidden><div class="result-toolbar"><span>本次运行的完整源代码</span><div><button id="apply-result" class="button secondary compact" disabled>继续编辑</button><button id="copy-result" class="button ghost compact" disabled>复制</button><button data-download="model.sysml" class="button ghost compact" disabled>下载代码</button></div></div><div id="result-editor" class="result-editor"></div><div id="result-hash" class="panel-footnote">运行后可追溯到源代码版本。</div></div>
-        <div id="tab-entities" class="result-tab" role="tabpanel" aria-labelledby="tab-button-entities" hidden><div class="result-toolbar"><label class="sr-only" for="entity-search">搜索实体</label><input id="entity-search" type="search" placeholder="搜索名称或类型…"><button data-download="entities.json" class="button secondary compact" disabled>导出 JSON</button></div><p class="panel-footnote">选择实体，定位到本次运行的源代码。</p><div id="entities" class="entity-list"></div></div>
-        <div id="tab-diagnostics" class="result-tab" role="tabpanel" aria-labelledby="tab-button-diagnostics" hidden><div id="quality" class="quality"></div><div id="diagnostics" class="diagnostic-list"></div><div id="run-facts" class="run-facts"></div><details class="trace-details"><summary>执行阶段与来源</summary><ol id="timeline"></ol><p id="run-reference" class="mono"></p></details></div>
-        <div id="tab-history" class="result-tab" role="tabpanel" aria-labelledby="tab-button-history" hidden><div class="result-toolbar"><span>每次运行独立保存，可以随时回看</span><button id="refresh-history" class="button ghost compact">刷新</button></div><div id="history" class="history-list"></div><button id="more-history" class="button secondary" hidden>加载更早记录</button></div>
+
+        <!-- 1. Diagram View -->
+        <div id="tab-diagram" class="result-tab diagram-tab" role="tabpanel" aria-labelledby="tab-button-diagram">
+          <div class="diagram-toolbar">
+            <span id="diagram-summary">语义结构概览</span>
+            <div class="diagram-controls">
+              <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新结构图">🔄 刷新渲染</button>
+              <button id="zoom-out" class="icon-button" aria-label="缩小图片">−</button>
+              <button id="zoom-fit" class="button ghost compact">适应画布</button>
+              <button id="zoom-in" class="icon-button" aria-label="放大图片">＋</button>
+              <button data-download="diagram.svg" class="button secondary compact" disabled>下载 SVG</button>
+            </div>
+          </div>
+          <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="结构图画布，可拖动和滚动">
+            <img id="diagram-image" alt="已验证 SysML 的语义结构图" hidden>
+            <div id="diagram-empty" class="empty-state">
+              <svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg>
+              <h3>从一份模型，看清系统结构</h3>
+              <p>在左侧编写 SysML，点击【运行渲染】生成结构图；或在 AI 助手输入自然语言需求。</p>
+              <button id="empty-example" class="button secondary">打开示例模型 <span aria-hidden="true">↗</span></button>
+            </div>
+          </div>
+          <div id="diagram-coverage" class="panel-footnote">仅显示已解析的语义结构；可通过鼠标拖拽与缩放。</div>
+        </div>
+
+        <!-- 2. Dedicated AI Copilot Tab -->
+        <div id="tab-copilot" class="result-tab copilot-tab" role="tabpanel" aria-labelledby="tab-button-copilot" hidden>
+          <div class="copilot-header">
+            <span class="copilot-model-badge">🤖 glm-5.3 · Volcengine Gateway</span>
+            <span class="copilot-status-note">伴随式建模 / 增量修改 / 语法自愈</span>
+          </div>
+          <div id="copilot-chat" class="copilot-chat">
+            <div class="copilot-msg assistant">
+              <div class="msg-avatar">🤖</div>
+              <div class="msg-body">
+                <p><strong>你好！我是 SysML AI 伴随建模助手。</strong></p>
+                <p>你可以直接向我描述你希望构建的系统结构、对当前模型进行增量扩充，或让我自愈修复代码中的语法报错。</p>
+              </div>
+            </div>
+          </div>
+          <div class="copilot-pills">
+            <button type="button" class="copilot-pill" data-prompt="根据当前模型，补充散热风扇与温度传感器，并建立控制连接">➕ 补充散热与温控</button>
+            <button type="button" class="copilot-pill" data-prompt="为当前系统的电源输出端口添加双向过流保护限制">🛡️ 添加过流保护</button>
+            <button type="button" class="copilot-pill" data-prompt="检查当前模型结构并自愈修复任何语法或类型错误">🩺 语法自愈修复</button>
+          </div>
+          <div class="copilot-composer">
+            <textarea id="copilot-input" rows="2" placeholder="输入建模需求、修改指示或疑问 (Enter 发送，Shift+Enter 换行)..."></textarea>
+            <div class="copilot-composer-footer">
+              <span class="copilot-hint"><kbd>Enter</kbd> 发送</span>
+              <button id="copilot-send" class="button primary compact">发送指令 <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Diagnostics Tab -->
+        <div id="tab-diagnostics" class="result-tab" role="tabpanel" aria-labelledby="tab-button-diagnostics" hidden>
+          <div id="quality" class="quality"></div>
+          <div id="diagnostics" class="diagnostic-list"></div>
+          <div id="run-facts" class="run-facts"></div>
+          <details class="trace-details"><summary>执行阶段与来源</summary><ol id="timeline"></ol><p id="run-reference" class="mono"></p></details>
+        </div>
+
+        <!-- Hidden tabs preserved for underlying references -->
+        <div id="tab-code" class="result-tab" role="tabpanel" aria-labelledby="tab-button-code" hidden>
+          <div class="result-toolbar"><span>本次运行的完整源代码</span><div><button id="apply-result" class="button secondary compact" disabled>继续编辑</button><button id="copy-result" class="button ghost compact" disabled>复制</button><button data-download="model.sysml" class="button ghost compact" disabled>下载代码</button></div></div>
+          <div id="result-editor" class="result-editor"></div>
+          <div id="result-hash" class="panel-footnote">运行后可追溯到源代码版本。</div>
+        </div>
+        <div id="tab-entities" class="result-tab" role="tabpanel" aria-labelledby="tab-button-entities" hidden>
+          <div class="result-toolbar"><label class="sr-only" for="entity-search">搜索实体</label><input id="entity-search" type="search" placeholder="搜索名称或类型…"><button data-download="entities.json" class="button secondary compact" disabled>导出 JSON</button></div>
+          <p class="panel-footnote">选择实体，定位到本次运行的源代码。</p>
+          <div id="entities" class="entity-list"></div>
+        </div>
+        <div id="tab-history" class="result-tab" role="tabpanel" aria-labelledby="tab-button-history" hidden>
+          <div class="result-toolbar"><span>每次运行独立保存，可以随时回看</span><button id="refresh-history" class="button ghost compact">刷新</button></div>
+          <div id="history" class="history-list"></div>
+          <button id="more-history" class="button secondary" hidden>加载更早记录</button>
+        </div>
       </section>
     </div>
     <footer class="status-bar"><span><i class="status-dot" id="connection-dot"></i><span id="connection-label">正在连接</span></span><span id="memory-label">会话记忆已开启</span><span>语言验证与工程意图评审分别进行</span></footer>

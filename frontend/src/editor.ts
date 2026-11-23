@@ -64,6 +64,85 @@ const sysml = StreamLanguage.define({
   },
 });
 
+export function formatSysML(source: string): string {
+  const lines = source.split(/\r?\n/);
+  const formatted: string[] = [];
+  let indentLevel = 0;
+  const indentStr = "    ";
+  let lastWasBlank = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      if (!lastWasBlank && formatted.length > 0) {
+        formatted.push("");
+        lastWasBlank = true;
+      }
+      continue;
+    }
+    lastWasBlank = false;
+
+    // Count closing braces that dedent the current line
+    let leadingClose = 0;
+    for (const ch of line) {
+      if (ch === "}" || ch === ")") leadingClose++;
+      else break;
+    }
+    const currentIndent = Math.max(0, indentLevel - leadingClose);
+
+    // Compute net brace change across this line
+    let net = 0;
+    let inStr = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === "/" && line[i + 1] === "/") break;
+      if (ch === '"' && (i === 0 || line[i - 1] !== "\\")) inStr = !inStr;
+      if (!inStr) {
+        if (ch === "{" || ch === "(") net++;
+        else if (ch === "}" || ch === ")") net--;
+      }
+    }
+
+    formatted.push(indentStr.repeat(currentIndent) + line);
+    indentLevel = Math.max(0, indentLevel + net);
+  }
+  return formatted.join("\n") + "\n";
+}
+
+function toggleLineComment(view: EditorView): boolean {
+  const { state } = view;
+  const changes = [];
+  const lineNumbers = new Set<number>();
+  for (const range of state.selection.ranges) {
+    const startLine = state.doc.lineAt(range.from).number;
+    const endLine = state.doc.lineAt(range.to).number;
+    for (let l = startLine; l <= endLine; l++) lineNumbers.add(l);
+  }
+  const sortedLines = Array.from(lineNumbers).sort((a, b) => a - b);
+  const allCommented = sortedLines.every((n) => {
+    const t = state.doc.line(n).text.trim();
+    return t.startsWith("//") || t === "";
+  });
+
+  for (const n of sortedLines) {
+    const line = state.doc.line(n);
+    if (allCommented) {
+      const idx = line.text.indexOf("//");
+      if (idx !== -1) {
+        const removeLen = line.text[idx + 2] === " " ? 3 : 2;
+        changes.push({ from: line.from + idx, to: line.from + idx + removeLen, insert: "" });
+      }
+    } else {
+      changes.push({ from: line.from, insert: "// " });
+    }
+  }
+  if (changes.length) {
+    view.dispatch({ changes });
+    return true;
+  }
+  return false;
+}
+
 export class SourceEditor {
   view: EditorView;
   private silent = false;
@@ -128,6 +207,18 @@ export class SourceEditor {
             onSave?.();
             return true;
           },
+        },
+        {
+          key: "Mod-/",
+          run: (view) => toggleLineComment(view),
+        },
+        {
+          key: "Shift-Alt-f",
+          run: () => this.format(),
+        },
+        {
+          key: "Mod-Shift-i",
+          run: () => this.format(),
         },
         indentWithTab,
         ...defaultKeymap,
@@ -204,5 +295,14 @@ export class SourceEditor {
       effects: EditorView.scrollIntoView(anchor, { y: "center" }),
     });
     this.view.focus();
+  }
+  format(): boolean {
+    const current = this.value;
+    const formatted = formatSysML(current);
+    if (formatted !== current) {
+      this.reset(formatted);
+      return true;
+    }
+    return false;
   }
 }

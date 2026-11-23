@@ -225,17 +225,71 @@ function renderSessions() {
   for (const session of sessions.filter((s) =>
     s.title.toLowerCase().includes(filter),
   )) {
-    const button = action(
-      "",
-      () => void selectSession(session.id).catch(fail),
-      `session-item ${session.id === sessionId ? "active" : ""}`,
-    );
-    button.append(node("span", session.title));
-    button.title = session.title;
-    button.setAttribute(
-      "aria-current",
-      session.id === sessionId ? "page" : "false",
-    );
+    const isCurrent = session.id === sessionId;
+    const button = node("div", "", `session-item ${isCurrent ? "active" : ""}`);
+    button.setAttribute("role", "button");
+    button.setAttribute("tabindex", "0");
+    button.title = `${session.title} (双击重命名)`;
+    button.setAttribute("aria-current", isCurrent ? "page" : "false");
+
+    const labelSpan = node("span", session.title);
+    button.append(labelSpan);
+
+    const startInlineRename = () => {
+      const input = document.createElement("input");
+      input.className = "session-rename-input";
+      input.value = session.title;
+      labelSpan.replaceWith(input);
+      input.focus();
+      input.select();
+      let committed = false;
+      const commit = async () => {
+        if (committed) return;
+        committed = true;
+        const newTitle = input.value.trim() || session.title;
+        if (newTitle !== session.title) {
+          try {
+            if (session.id === sessionId && buffer) {
+              buffer.set({ ...buffer.value, title: newTitle });
+              el("rename-session").textContent = newTitle;
+              await save();
+            } else {
+              await api.json(`/v1/sessions/${session.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({ title: newTitle }),
+              });
+              session.title = newTitle;
+            }
+          } catch (err) {
+            fail(err);
+          }
+        }
+        renderSessions();
+      };
+      input.onblur = () => void commit();
+      input.onkeydown = (ke) => {
+        if (ke.key === "Enter") {
+          ke.preventDefault();
+          void commit();
+        } else if (ke.key === "Escape") {
+          ke.preventDefault();
+          committed = true;
+          renderSessions();
+        }
+      };
+    };
+
+    button.onclick = (e) => {
+      if ((e.target as HTMLElement).tagName === "INPUT") return;
+      void selectSession(session.id).catch(fail);
+    };
+
+    button.ondblclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      startInlineRename();
+    };
+
     list.append(button);
   }
   if (!list.childElementCount)
@@ -334,9 +388,9 @@ async function createSession(value?: WorkspaceValue) {
     updateControls();
   }
 }
-async function applySource(source: string) {
+async function applySource(source: string, skipConfirm = false) {
   if (!buffer) return;
-  if (sourceEditor.value && sourceEditor.value !== source) {
+  if (!skipConfirm && sourceEditor.value && sourceEditor.value !== source) {
     const choice = await dialog(
       "将结果用于继续编辑？",
       "当前草稿将替换为这份代码。运行记录保持不变，编辑器中可撤销这次替换。",
@@ -528,7 +582,10 @@ async function poll(ticket = runGate.current) {
       if (!runGate.accepts(ticket)) return;
       if (run.status === "failed") results.tab("diagnostics");
       else if (run.task === "extract") results.tab("entities");
-      else if (!run.result?.diagram) results.tab("code");
+      else if (run.task === "render" || run.result?.diagram) results.tab("diagram");
+      else if (["generate", "revise", "repair"].includes(run.task)) {
+        notifyCopilotRunComplete(run);
+      }
       el("announcement").textContent =
         `${taskNames[run.task]}${run.status === "succeeded" ? "已完成" : "已结束"}`;
     }
@@ -554,20 +611,60 @@ async function poll(ticket = runGate.current) {
     polling.delete(ticket);
   }
 }
-async function submitRun() {
+
+function notifyCopilotRunComplete(run: Run) {
+  const chat = el("copilot-chat");
+  if (!chat) return;
+  const msg = node("div", "", "copilot-msg assistant");
+  const avatar = node("div", "🤖", "msg-avatar");
+  const body = node("div", "", "msg-body");
+
+  const p = node("p", `✨ 模型任务【${taskNames[run.task] || run.task}】已成功完成！`);
+  body.append(p);
+
+  if (run.result?.diagnostics?.length) {
+    const diagNote = node("p", `⚠️ 伴随诊断提示：${run.result.diagnostics.length} 项。可在“诊断”标签页查看详情。`, "copilot-diag-note");
+    body.append(diagNote);
+  }
+
+  if (run.result?.sysml_source) {
+    const code = run.result.sysml_source;
+    const actions = node("div", "", "copilot-code-actions");
+    const applyBtn = action("【将此代码应用到编辑器】", () => {
+      void applySource(code, true);
+      notice("已应用最新生成的代码！");
+      results.tab("diagram");
+    }, "button primary compact");
+    actions.append(applyBtn);
+    body.append(actions);
+
+    if (!sourceEditor.value.trim()) {
+      void applySource(code, true);
+    }
+  }
+
+  msg.append(avatar, body);
+  chat.append(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function submitRun(overrideTask?: Task, overrideRequest?: string) {
   if (submitting || switching || !buffer || !sessionId) return;
-  const task = buffer.value.draft.task;
+  const task = overrideTask || buffer.value.draft.task;
+  const req = overrideRequest !== undefined ? overrideRequest : buffer.value.draft.request;
   if (!capabilities?.capabilities.includes(task)) {
     notice(messages.model_not_configured);
     return;
   }
   // Capture exactly what the user chose to run; autosave may finish after more edits.
   const draft = structuredClone(buffer.value.draft);
+  draft.task = task;
+  draft.request = req;
   const model = sessionId;
   const epoch = authGate.current;
   if (["generate", "revise"].includes(task) && !draft.request.trim()) {
     notice("请先描述你的工程需求或修改要求。");
-    el("prompt").focus();
+    if (!overrideTask) el("prompt").focus();
     return;
   }
   if (task !== "generate" && !draft.sysml_source.trim()) {
@@ -599,11 +696,13 @@ async function submitRun() {
     submission.accepted();
     notice();
     results.tab(
-      task === "render" || payload.render
+      overrideTask === "render" || task === "render" || payload.render
         ? "diagram"
-        : task === "extract"
-          ? "entities"
-          : "diagnostics",
+        : ["generate", "revise", "repair"].includes(task)
+          ? "copilot"
+          : task === "extract"
+            ? "entities"
+            : "diagnostics",
     );
     await viewRun(job.id);
   } catch (error) {
@@ -1003,6 +1102,123 @@ el("open-status").onclick = () => {
 };
 el("close-status").onclick = () =>
   el<HTMLDialogElement>("status-modal").close();
+el("format-code").onclick = () => {
+  sourceEditor.format();
+};
+el("render-run").onclick = () => {
+  void submitRun("render");
+};
+el("btn-quick-render").onclick = () => {
+  void submitRun("render");
+};
+
+function initResizer() {
+  const resizer = el("pane-resizer");
+  const editorPane = document.querySelector<HTMLElement>(".editor-pane");
+  const workspaceBody = document.querySelector<HTMLElement>(".workspace-body");
+  if (!resizer || !editorPane || !workspaceBody) return;
+
+  let isDragging = false;
+
+  resizer.addEventListener("mousedown", () => {
+    isDragging = true;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const bodyRect = workspaceBody.getBoundingClientRect();
+    const newWidth = e.clientX - bodyRect.left;
+    const minWidth = 280;
+    const maxWidth = bodyRect.width - 280;
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      const percentage = (newWidth / bodyRect.width) * 100;
+      editorPane.style.flex = `0 0 ${percentage}%`;
+    }
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (isDragging) {
+      isDragging = false;
+      resizer.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  });
+}
+
+function initCopilot() {
+  const chat = el("copilot-chat");
+  const input = el<HTMLTextAreaElement>("copilot-input");
+  const sendBtn = el<HTMLButtonElement>("copilot-send");
+
+  function appendMsg(role: "user" | "assistant", content: string) {
+    const msg = node("div", "", `copilot-msg ${role}`);
+    const avatar = node("div", role === "user" ? "👤" : "🤖", "msg-avatar");
+    const body = node("div", "", "msg-body");
+    const p = node("p", content);
+    body.append(p);
+    msg.append(avatar, body);
+    chat.append(msg);
+    chat.scrollTop = chat.scrollHeight;
+    return msg;
+  }
+
+  async function handleSend(promptText: string) {
+    const text = promptText.trim();
+    if (!text || submitting || !sessionId) return;
+
+    appendMsg("user", text);
+    input.value = "";
+
+    let task: Task = "revise";
+    if (!sourceEditor.value.trim()) {
+      task = "generate";
+    } else if (text.includes("修复") || text.includes("自愈") || text.includes("报错")) {
+      task = "repair";
+    }
+
+    const pendingMsg = appendMsg("assistant", "正在思考并调用 glm-5.3 生成模型代码...");
+
+    try {
+      if (buffer) {
+        edit({
+          ...buffer.value.draft,
+          task,
+          request: text,
+          render: true,
+        });
+      }
+      await submitRun(task, text);
+    } catch (err) {
+      const msgBody = pendingMsg.querySelector(".msg-body");
+      if (msgBody) {
+        msgBody.textContent = "执行遇到错误: " + (err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  sendBtn.onclick = () => {
+    void handleSend(input.value);
+  };
+
+  input.onkeydown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend(input.value);
+    }
+  };
+
+  for (const pill of document.querySelectorAll<HTMLButtonElement>(".copilot-pill")) {
+    pill.onclick = () => {
+      const p = pill.dataset.prompt;
+      if (p) void handleSend(p);
+    };
+  }
+}
+
 window.addEventListener("beforeunload", (event) => {
   if (buffer?.dirty) {
     event.preventDefault();
@@ -1019,6 +1235,8 @@ document.addEventListener("visibilitychange", () => {
 });
 results.reset();
 updateControls();
+initResizer();
+initCopilot();
 void api
   .json<Identity>("/v1/auth/session")
   .then(enter)

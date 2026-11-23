@@ -36,8 +36,28 @@ class ModelGatewayConfig:
 
     @classmethod
     def from_env(cls) -> "ModelGatewayConfig":
+        # Auto-load .env if present
+        from pathlib import Path
+        for env_path in (Path.cwd() / ".env", Path(__file__).resolve().parents[4] / ".env"):
+            if env_path.is_file():
+                try:
+                    for line in env_path.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            os.environ[k.strip()] = v.strip()
+                except Exception:
+                    pass
+
         raw_provider = os.getenv("SYSML_AGENT_MODEL_PROVIDER", "").strip()
         model = os.getenv("SYSML_AGENT_MODEL_NAME", "").strip()
+
+        # Sensible defaults when BLUE_GATEWAY_API_KEY is configured
+        if os.getenv("BLUE_GATEWAY_API_KEY"):
+            if not raw_provider:
+                raw_provider = "openai_compatible"
+            if not model:
+                model = "glm-5.3"
 
         if raw_provider not in SUPPORTED_PROVIDERS:
             raise ModelConfigurationError(
@@ -47,7 +67,7 @@ class ModelGatewayConfig:
         if not model:
             raise ModelConfigurationError("SYSML_AGENT_MODEL_NAME is required.")
 
-        api_key = os.getenv("SYSML_AGENT_MODEL_API_KEY")
+        api_key = os.getenv("SYSML_AGENT_MODEL_API_KEY") or os.getenv("BLUE_GATEWAY_API_KEY")
         if not api_key:
             if raw_provider in {"openai", "openai_compatible"}:
                 api_key = os.getenv("OPENAI_API_KEY")
@@ -62,10 +82,14 @@ class ModelGatewayConfig:
                 "Model timeout/max output token environment values are invalid."
             ) from exc
 
+        base_url = os.getenv("SYSML_AGENT_MODEL_BASE_URL")
+        if not base_url and os.getenv("BLUE_GATEWAY_API_KEY"):
+            base_url = "https://st8tp3ajl0df3n8b8l8qu.apigateway-cn-beijing.volceapi.com/v1"
+
         return cls(
             provider=cast(ModelProvider, raw_provider),
             model=model,
-            base_url=os.getenv("SYSML_AGENT_MODEL_BASE_URL"),
+            base_url=base_url,
             api_key=api_key,
             timeout_seconds=timeout,
             max_output_tokens=max_output,
