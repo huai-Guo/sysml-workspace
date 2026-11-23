@@ -7,10 +7,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import secrets
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -141,6 +142,12 @@ class LocalDatabase:
 
     def authenticate_browser(self, session: str) -> Owner:
         return Owner("workspace", "developer")
+
+    def create_browser_session(self, token: str):
+        owner = Owner("workspace", "developer")
+        session = secrets.token_urlsafe(32)
+        expiry = datetime.now(timezone.utc) + timedelta(days=90)
+        return session, owner, expiry
 
     def revoke_browser_session(self, session: str) -> None:
         pass

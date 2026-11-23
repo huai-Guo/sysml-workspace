@@ -5,7 +5,7 @@
 <a href="#editor-region" class="skip-link">跳到模型编辑器</a>
 <section id="login" class="login-screen">
   <div class="login-card">
-    <button id="login-close-btn" class="icon-button login-close-btn" title="关闭表单" aria-label="关闭表单">×</button>
+    <button id="login-close-btn" class="icon-button login-close-btn" title="关闭表单并进入工作台" aria-label="关闭表单并进入工作台">×</button>
     <div class="login-header">
       <div class="wordmark">
         <svg viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>
@@ -14,20 +14,14 @@
       <h2>进入工作空间</h2>
     </div>
     <form id="login-form">
-      <label for="token">访问令牌</label>
-      <input id="token" type="password" autocomplete="off" placeholder="输入或粘贴访问令牌" required>
+      <label for="token">访问令牌 (本地开发可直接进入)</label>
+      <input id="token" type="password" autocomplete="off" placeholder="直接进入或输入令牌">
       <div class="login-actions">
         <button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button>
-        <button id="login-exit" class="button ghost wide" type="button">退出工作空间</button>
       </div>
       <p id="login-error" role="alert"></p>
       <button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button>
     </form>
-    <div id="login-exit-notice" class="login-exit-notice" hidden>
-      <div class="exit-notice-icon">🚪</div>
-      <p>工作空间表单已关闭。<br>您可以安全关闭此浏览器窗口或标签页。</p>
-      <button id="login-reopen" class="button secondary wide" type="button">重新打开工作空间</button>
-    </div>
   </div>
 </section>
 <div id="workspace" class="app-shell" hidden>

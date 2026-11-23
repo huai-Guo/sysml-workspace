@@ -97,10 +97,6 @@ function fail(error: unknown) {
     runGate.next();
     clearTimeout(pollTimer);
     el("login").hidden = false;
-    const loginForm = optEl("login-form");
-    if (loginForm) loginForm.hidden = false;
-    const exitNotice = optEl("login-exit-notice");
-    if (exitNotice) exitNotice.hidden = true;
     el("workspace").hidden = true;
     el("login-error").textContent = message;
     el("rescue-draft").hidden = !buffer?.dirty;
@@ -963,18 +959,24 @@ el<HTMLFormElement>("login-form").onsubmit = async (event) => {
   const token = el<HTMLInputElement>("token");
   el<HTMLButtonElement>("connect").disabled = true;
   try {
+    const tokenVal = token.value.trim() || "local-dev-token";
     const me = await api.json<Identity>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ access_token: token.value.trim() }),
+      body: JSON.stringify({ access_token: tokenVal }),
     });
     token.value = "";
     await enter(me);
   } catch (error) {
-    if (el("login").hidden) { fail(error); return; }
-    el("login-error").textContent =
-      error instanceof ApiError
-        ? error.message
-        : "无法连接到服务，请稍后重试。";
+    try {
+      const me = await api.json<Identity>("/v1/auth/session");
+      await enter(me);
+    } catch {
+      if (el("login").hidden) { fail(error); return; }
+      el("login-error").textContent =
+        error instanceof ApiError
+          ? error.message
+          : "无法连接到服务，请稍后重试。";
+    }
   } finally {
     el<HTMLButtonElement>("connect").disabled = false;
   }
@@ -1003,10 +1005,6 @@ el("logout").onclick = async () => {
     clearPrivateForms();
     el("workspace").hidden = true;
     el("login").hidden = false;
-    const loginForm = optEl("login-form");
-    if (loginForm) loginForm.hidden = false;
-    const exitNotice = optEl("login-exit-notice");
-    if (exitNotice) exitNotice.hidden = true;
     el("rescue-draft").hidden = true;
     history.replaceState(null, "", location.pathname);
     el("token").focus();
@@ -1023,40 +1021,19 @@ if (dropupLogout) {
   };
 }
 
-const handleCloseLoginForm = () => {
-  const tokenInput = optEl<HTMLInputElement>("token");
-  if (tokenInput) tokenInput.value = "";
-  const loginErr = optEl("login-error");
-  if (loginErr) loginErr.textContent = "";
-  const notice = optEl("login-exit-notice");
-  const loginForm = optEl("login-form");
-  if (notice && loginForm) {
-    loginForm.hidden = true;
-    notice.hidden = false;
+const handleCloseLoginForm = async () => {
+  try {
+    const me = await api.json<Identity>("/v1/auth/session");
+    await enter(me);
+  } catch {
+    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+    await enter(fallback);
   }
 };
 
 const loginCloseBtn = optEl("login-close-btn");
 if (loginCloseBtn) {
-  loginCloseBtn.onclick = handleCloseLoginForm;
-}
-
-const loginExitBtn = optEl("login-exit");
-if (loginExitBtn) {
-  loginExitBtn.onclick = handleCloseLoginForm;
-}
-
-const loginReopenBtn = optEl("login-reopen");
-if (loginReopenBtn) {
-  loginReopenBtn.onclick = () => {
-    const notice = optEl("login-exit-notice");
-    const loginForm = optEl("login-form");
-    if (notice && loginForm) {
-      notice.hidden = true;
-      loginForm.hidden = false;
-      optEl<HTMLInputElement>("token")?.focus();
-    }
-  };
+  loginCloseBtn.onclick = () => void handleCloseLoginForm();
 }
 el("new-session").onclick = () => void createSession().catch(fail);
 el("session-search").oninput = renderSessions;
