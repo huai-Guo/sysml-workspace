@@ -597,6 +597,7 @@ async function viewRun(id: string) {
   pollFailures = 0;
   clearTimeout(pollTimer);
   results.reset();
+  results.setLoading(true, "正在动态加载架构视图…");
   updateUrl();
   renderHistory();
   await poll(ticket);
@@ -800,6 +801,17 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
   if (submitting || switching || !buffer || !sessionId) return;
   const task = overrideTask || buffer.value.draft.task;
   const req = overrideRequest !== undefined ? overrideRequest : buffer.value.draft.request;
+
+  // Immediately switch to the target view and show dynamic progressive loading!
+  if (overrideTask === "render" || task === "render" || ["generate", "revise", "repair"].includes(task)) {
+    layoutManager.focusView();
+    results.setLoading(true, "正在编译代码并生成架构拓扑…");
+  } else if (task === "extract") {
+    results.tab("entities");
+  } else {
+    results.tab("diagnostics");
+  }
+
   if (!capabilities) {
     try {
       await refreshCapabilities();
@@ -859,6 +871,7 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
     }
     await viewRun(job.id);
   } catch (error) {
+    results.setLoading(false);
     fail(error);
   } finally {
     submitting = false;
@@ -1280,6 +1293,23 @@ if (editTitleBtn) {
   editTitleBtn.onclick = () => el("rename-session").click();
 }
 const layoutManager = new LayoutManager();
+
+const sideFileSource = document.getElementById("sidebar-file-source");
+const sideFileView = document.getElementById("sidebar-file-view");
+if (sideFileSource) {
+  sideFileSource.onclick = () => {
+    layoutManager.focusEditor();
+    sideFileSource.classList.add("active");
+    sideFileView?.classList.remove("active");
+  };
+}
+if (sideFileView) {
+  sideFileView.onclick = () => {
+    layoutManager.focusView();
+    sideFileView.classList.add("active");
+    sideFileSource?.classList.remove("active");
+  };
+}
 
 function appendCopilotMsg(role: "user" | "assistant", content: string) {
   const chat = el("copilot-chat");

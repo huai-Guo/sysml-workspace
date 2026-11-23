@@ -40,14 +40,14 @@
       <input id="session-search" class="search" type="search" placeholder="搜索模型与会话…" autocomplete="off">
     </div>
 
-    <!-- Codex-style Section 1: Project Files -->
+    <!-- Codex-style Section 1: Project Files & View -->
     <div class="sidebar-section">
       <div class="section-label">
-        <span>📁 工程文件</span>
+        <span>📁 源代码与视图 (Files)</span>
         <span class="section-tag">SysML v2</span>
       </div>
       <div class="project-files-list">
-        <div class="file-item active" id="active-file-item" title="model.sysml (点击聚焦代码编辑器)">
+        <div class="file-item active" id="sidebar-file-source" title="model.sysml (点击切换至代码编辑)">
           <span class="file-icon">S</span>
           <div class="file-info">
             <strong class="file-title">model.sysml</strong>
@@ -55,7 +55,7 @@
           </div>
           <span class="file-badge">ACTIVE</span>
         </div>
-        <div class="file-item" id="sidebar-view-item" title="视图 · view.svg (点击聚焦视图面板)">
+        <div class="file-item" id="sidebar-file-view" title="视图 · view.svg (点击切换至架构视图)">
           <span class="file-icon view-icon">V</span>
           <div class="file-info">
             <strong class="file-title">视图</strong>
@@ -189,6 +189,17 @@
                   </div>
                 </div>
                 <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="视图画布，可拖动和滚动">
+                  <!-- Dynamic Progressive Loading Skeleton -->
+                  <div id="diagram-loading-skeleton" class="diagram-skeleton" hidden>
+                    <div class="skeleton-preview-box">
+                      <div class="skeleton-shimmer"></div>
+                      <div class="skeleton-spinner"></div>
+                    </div>
+                    <div class="skeleton-info">
+                      <strong class="skeleton-title" id="skeleton-title-text">正在动态解析与渲染架构视图…</strong>
+                      <p class="skeleton-sub">语义模型提取 · 实体关联拓扑分析 · SVG 排版生成中</p>
+                    </div>
+                  </div>
                   <img id="diagram-image" alt="已验证 SysML 的语义视图" hidden>
                   <div id="diagram-empty" class="empty-state">
                     <svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg>

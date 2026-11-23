@@ -161,14 +161,35 @@ export class Results {
     if (name === "diagram") this.resize();
     if (name === "code") this.resultEditor.view.requestMeasure();
   }
-  reset() {
+  setLoading(loading: boolean, message = "正在动态解析与渲染架构视图…") {
+    const skeleton = optEl("diagram-loading-skeleton");
+    const emptyState = optEl("diagram-empty");
+    const viewport = optEl("diagram-viewport");
+    const titleEl = optEl("skeleton-title-text");
+
+    if (loading) {
+      if (skeleton) skeleton.hidden = false;
+      if (emptyState) emptyState.hidden = true;
+      if (viewport) viewport.classList.add("is-loading-view");
+      if (titleEl && message) titleEl.textContent = message;
+    } else {
+      if (skeleton) skeleton.hidden = true;
+      if (viewport) viewport.classList.remove("is-loading-view");
+    }
+  }
+  reset(keepLoading = false) {
+    if (!keepLoading) {
+      this.setLoading(false);
+    }
     this.current = undefined;
     this.resultEditor.reset("");
     if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
     this.imageUrl = undefined;
     el<HTMLImageElement>("diagram-image").removeAttribute("src");
     el("diagram-image").hidden = true;
-    el("diagram-empty").hidden = false;
+    if (!keepLoading) {
+      el("diagram-empty").hidden = false;
+    }
     el("diagram-viewport").classList.remove("has-diagram");
     for (const id of ["run-progress", "result-error", "stale-result"])
       el(id).hidden = true;
@@ -204,8 +225,13 @@ export class Results {
     if (resHash) resHash.textContent = "";
   }
   show(job: Run) {
-    if (this.current?.id !== job.id) this.reset();
+    const isJobActive = active(job.status);
+    if (this.current?.id !== job.id) this.reset(isJobActive);
     this.current = job;
+    if (isJobActive) {
+      const msg = phaseNames[job.phase] ? `正在${phaseNames[job.phase]}…` : "正在编译代码并生成架构拓扑…";
+      this.setLoading(true, msg);
+    }
     const runStatusEl = optEl("run-status");
     if (runStatusEl) {
       runStatusEl.textContent =
@@ -342,6 +368,9 @@ export class Results {
     if (copyBtn) copyBtn.disabled = !result.sysml_source;
     const applyBtn = optEl<HTMLButtonElement>("apply-result");
     if (applyBtn) applyBtn.disabled = !result.sysml_source;
+    if (job.status === "failed") {
+      this.setLoading(false);
+    }
     if (result.diagram?.svg) {
       if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
       this.imageUrl = URL.createObjectURL(
@@ -352,6 +381,7 @@ export class Results {
         image.src = this.imageUrl;
         image.hidden = false;
       }
+      this.setLoading(false);
       const diagEmpty = optEl("diagram-empty");
       if (diagEmpty) diagEmpty.hidden = true;
       const diagViewport = optEl("diagram-viewport");
