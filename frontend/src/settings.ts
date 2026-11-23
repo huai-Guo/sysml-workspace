@@ -1,4 +1,4 @@
-import { el, optEl } from "./dom";
+import { optEl } from "./dom";
 
 export type ThemeType = "codex-dark" | "midnight" | "oled" | "light";
 export type FontFamilyType = "jetbrains" | "fira" | "cascadia" | "consolas" | "system";
@@ -65,28 +65,37 @@ export function applySettings(settings: SettingsState) {
   root.style.setProperty("--editor-tab-size", settings.tabSize || "4");
 
   saveSettings(settings);
-  syncSelects(settings);
+  syncDropupUI(settings);
 
   if (changeListener) {
     changeListener(settings);
   }
 }
 
-function syncSelects(settings: SettingsState) {
-  const themeSel = optEl<HTMLSelectElement>("setting-theme");
-  if (themeSel) themeSel.value = settings.theme;
+function syncDropupUI(settings: SettingsState) {
+  // Theme option buttons
+  document.querySelectorAll<HTMLButtonElement>('.dropup-opt-btn[data-setting="theme"]').forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === settings.theme);
+  });
 
-  const fontSel = optEl<HTMLSelectElement>("setting-font-family");
+  // Font family select
+  const fontSel = optEl<HTMLSelectElement>("dropup-font-family");
   if (fontSel) fontSel.value = settings.fontFamily;
 
-  const sizeSel = optEl<HTMLSelectElement>("setting-font-size");
-  if (sizeSel) sizeSel.value = settings.fontSize;
+  // Font size buttons
+  document.querySelectorAll<HTMLButtonElement>('.dropup-seg-btn[data-setting="fontSize"]').forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === settings.fontSize);
+  });
 
-  const tabSel = optEl<HTMLSelectElement>("setting-tab-size");
-  if (tabSel) tabSel.value = settings.tabSize;
+  // Line wrap buttons
+  document.querySelectorAll<HTMLButtonElement>('.dropup-pill-btn[data-setting="lineWrap"]').forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === settings.lineWrap);
+  });
 
-  const wrapSel = optEl<HTMLSelectElement>("setting-line-wrap");
-  if (wrapSel) wrapSel.value = settings.lineWrap;
+  // Tab size buttons
+  document.querySelectorAll<HTMLButtonElement>('.dropup-pill-btn[data-setting="tabSize"]').forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === settings.tabSize);
+  });
 }
 
 export function initSettings(onChange?: (settings: SettingsState) => void): SettingsState {
@@ -94,65 +103,113 @@ export function initSettings(onChange?: (settings: SettingsState) => void): Sett
   const initial = loadSettings();
   applySettings(initial);
 
-  const modal = optEl<HTMLDialogElement>("settings-modal");
-  const openBtn = optEl("open-settings");
-  const closeBtn = optEl("close-settings");
-  const saveBtn = optEl("save-settings");
-  const resetBtn = optEl("reset-settings");
+  const dropup = optEl<HTMLElement>("settings-dropup");
+  const openBtn = optEl<HTMLButtonElement>("open-settings");
+  const userBtn = optEl<HTMLElement>("account-user-btn");
+  const resetBtn = optEl<HTMLButtonElement>("reset-settings-dropup");
 
-  if (openBtn && modal) {
-    openBtn.onclick = () => {
-      syncSelects(currentSettings);
-      modal.showModal();
+  const toggleDropup = (e?: Event) => {
+    e?.stopPropagation();
+    if (!dropup) return;
+    const isHidden = dropup.hidden;
+    dropup.hidden = !isHidden;
+    if (openBtn) {
+      openBtn.setAttribute("aria-expanded", isHidden ? "true" : "false");
+    }
+    if (isHidden) {
+      syncDropupUI(currentSettings);
+    }
+  };
+
+  const closeDropup = () => {
+    if (dropup && !dropup.hidden) {
+      dropup.hidden = true;
+      if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+    }
+  };
+
+  if (openBtn) openBtn.onclick = toggleDropup;
+  if (userBtn) userBtn.onclick = toggleDropup;
+
+  // Close dropup when clicking outside
+  document.addEventListener("click", (e) => {
+    if (dropup && !dropup.hidden) {
+      const target = e.target as Node;
+      if (!dropup.contains(target) && !openBtn?.contains(target) && !userBtn?.contains(target)) {
+        closeDropup();
+      }
+    }
+  });
+
+  // Close dropup on Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && dropup && !dropup.hidden) {
+      closeDropup();
+    }
+  });
+
+  // Theme option clicks
+  document.querySelectorAll<HTMLButtonElement>('.dropup-opt-btn[data-setting="theme"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const val = btn.dataset.value as ThemeType;
+      if (val) {
+        applySettings({ ...currentSettings, theme: val });
+      }
+    };
+  });
+
+  // Font family change
+  const fontSel = optEl<HTMLSelectElement>("dropup-font-family");
+  if (fontSel) {
+    fontSel.onchange = (e) => {
+      e.stopPropagation();
+      const val = fontSel.value as FontFamilyType;
+      if (val) {
+        applySettings({ ...currentSettings, fontFamily: val });
+      }
     };
   }
 
-  if (closeBtn && modal) {
-    closeBtn.onclick = () => modal.close();
-  }
-
-  if (saveBtn && modal) {
-    saveBtn.onclick = () => {
-      const updated: SettingsState = {
-        theme: (optEl<HTMLSelectElement>("setting-theme")?.value as ThemeType) || "codex-dark",
-        fontFamily: (optEl<HTMLSelectElement>("setting-font-family")?.value as FontFamilyType) || "jetbrains",
-        fontSize: (optEl<HTMLSelectElement>("setting-font-size")?.value as FontSizeType) || "13px",
-        tabSize: (optEl<HTMLSelectElement>("setting-tab-size")?.value as TabSizeType) || "4",
-        lineWrap: (optEl<HTMLSelectElement>("setting-line-wrap")?.value as LineWrapType) || "on",
-      };
-      applySettings(updated);
-      modal.close();
+  // Font size clicks
+  document.querySelectorAll<HTMLButtonElement>('.dropup-seg-btn[data-setting="fontSize"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const val = btn.dataset.value as FontSizeType;
+      if (val) {
+        applySettings({ ...currentSettings, fontSize: val });
+      }
     };
-  }
+  });
 
+  // Line wrap clicks
+  document.querySelectorAll<HTMLButtonElement>('.dropup-pill-btn[data-setting="lineWrap"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const val = btn.dataset.value as LineWrapType;
+      if (val) {
+        applySettings({ ...currentSettings, lineWrap: val });
+      }
+    };
+  });
+
+  // Tab size clicks
+  document.querySelectorAll<HTMLButtonElement>('.dropup-pill-btn[data-setting="tabSize"]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const val = btn.dataset.value as TabSizeType;
+      if (val) {
+        applySettings({ ...currentSettings, tabSize: val });
+      }
+    };
+  });
+
+  // Reset to default
   if (resetBtn) {
-    resetBtn.onclick = () => {
+    resetBtn.onclick = (e) => {
+      e.stopPropagation();
       applySettings({ ...DEFAULT_SETTINGS });
     };
-  }
-
-  // Real-time preview on change
-  const selects = [
-    "setting-theme",
-    "setting-font-family",
-    "setting-font-size",
-    "setting-tab-size",
-    "setting-line-wrap",
-  ];
-  for (const id of selects) {
-    const el = optEl<HTMLSelectElement>(id);
-    if (el) {
-      el.onchange = () => {
-        const preview: SettingsState = {
-          theme: (optEl<HTMLSelectElement>("setting-theme")?.value as ThemeType) || "codex-dark",
-          fontFamily: (optEl<HTMLSelectElement>("setting-font-family")?.value as FontFamilyType) || "jetbrains",
-          fontSize: (optEl<HTMLSelectElement>("setting-font-size")?.value as FontSizeType) || "13px",
-          tabSize: (optEl<HTMLSelectElement>("setting-tab-size")?.value as TabSizeType) || "4",
-          lineWrap: (optEl<HTMLSelectElement>("setting-line-wrap")?.value as LineWrapType) || "on",
-        };
-        applySettings(preview);
-      };
-    }
   }
 
   return currentSettings;

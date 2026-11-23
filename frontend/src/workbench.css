@@ -1846,6 +1846,7 @@ body.is-tab-dragging .pane-body {
   padding: 8px 10px;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-sidebar);
+  position: relative;
 }
 
 .account-user {
@@ -1854,6 +1855,14 @@ body.is-tab-dragging .pane-body {
   gap: 8px;
   min-width: 0;
   flex: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  transition: background 0.15s ease;
+}
+
+.account-user:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .account-name {
@@ -1988,6 +1997,34 @@ body.is-tab-dragging .pane-body {
   gap: 14px;
 }
 
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.login-exit-notice {
+  text-align: center;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.login-exit-notice .exit-notice-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.login-exit-notice p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+
 /* Dialog Modals */
 dialog {
   border: 1px solid var(--border-subtle);
@@ -2023,78 +2060,270 @@ dialog::backdrop {
   margin-top: 16px;
 }
 
-/* Settings Modal (Codex / VS Code style) */
-.settings-dialog {
+/* Settings Dropup (Codex / ChatGPT style popover upward options menu) */
+.settings-dropup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 6px;
+  width: 270px;
   background: var(--bg-card);
-  color: var(--text-primary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-dropdown);
-  width: 460px;
-  max-width: 90vw;
-  padding: 0;
-  overflow: hidden;
-}
-
-.settings-modal-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-modal-header h2 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.settings-dialog .dialog-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 18px;
-  margin-bottom: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-card-header);
-}
-
-.settings-body {
-  padding: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+  padding: 10px;
+  z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  animation: dropupSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(12px);
 }
 
-.settings-section {
+.settings-dropup[hidden] {
+  display: none !important;
+}
+
+@keyframes dropupSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropup-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.settings-label {
-  font-size: 12.5px;
-  font-weight: 500;
+.dropup-title {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.settings-select {
+.dropup-action-btn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.dropup-action-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dropup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dropup-group-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Theme 2x2 grid */
+.dropup-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.dropup-opt-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.dropup-opt-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dropup-opt-btn.active {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  background: rgba(14, 165, 233, 0.12);
+  font-weight: 600;
+}
+
+.opt-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.theme-swatch-codex { background: #18181b; }
+.theme-swatch-midnight { background: #0b132b; }
+.theme-swatch-oled { background: #000000; }
+.theme-swatch-light { background: #ffffff; border-color: #cbd5e1; }
+
+.dropup-select-row {
+  width: 100%;
+}
+
+.dropup-native-select {
+  width: 100%;
   background: var(--bg-sidebar);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: 12px;
-  min-width: 180px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.dropup-native-select:focus {
+  border-color: var(--accent-blue);
+  outline: none;
 }
 
-.settings-dialog .dialog-actions {
+/* Segmented font size */
+.dropup-segmented-control {
+  display: flex;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.dropup-seg-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 4px 0;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.dropup-seg-btn:hover {
+  color: var(--text-primary);
+}
+
+.dropup-seg-btn.active {
+  background: var(--bg-card);
+  color: var(--accent-blue);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Row split for wraps & tabsize */
+.dropup-row-split {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dropup-toggle-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dropup-item-label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.dropup-pill-group {
+  display: flex;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.dropup-pill-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 3px 0;
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.dropup-pill-btn.active {
+  background: var(--bg-card);
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.dropup-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 2px 0;
+}
+
+.dropup-footer {
+  display: flex;
+  flex-direction: column;
+}
+
+.dropup-menu-action {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  padding: 12px 18px;
-  margin-top: 0;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-card-header);
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.dropup-menu-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dropup-menu-action.danger {
+  color: var(--accent-red, #f43f5e);
+}
+.dropup-menu-action.danger:hover {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
 }

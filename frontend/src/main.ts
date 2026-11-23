@@ -97,6 +97,10 @@ function fail(error: unknown) {
     runGate.next();
     clearTimeout(pollTimer);
     el("login").hidden = false;
+    const loginForm = optEl("login-form");
+    if (loginForm) loginForm.hidden = false;
+    const exitNotice = optEl("login-exit-notice");
+    if (exitNotice) exitNotice.hidden = true;
     el("workspace").hidden = true;
     el("login-error").textContent = message;
     el("rescue-draft").hidden = !buffer?.dirty;
@@ -999,12 +1003,53 @@ el("logout").onclick = async () => {
     clearPrivateForms();
     el("workspace").hidden = true;
     el("login").hidden = false;
+    const loginForm = optEl("login-form");
+    if (loginForm) loginForm.hidden = false;
+    const exitNotice = optEl("login-exit-notice");
+    if (exitNotice) exitNotice.hidden = true;
     el("rescue-draft").hidden = true;
     history.replaceState(null, "", location.pathname);
     el("token").focus();
   } catch (error) {
     fail(error);
   }
+};
+
+const dropupLogout = optEl("dropup-logout");
+if (dropupLogout) {
+  dropupLogout.onclick = (e) => {
+    e.stopPropagation();
+    el("logout").click();
+  };
+}
+
+const loginExitBtn = optEl("login-exit");
+if (loginExitBtn) {
+  loginExitBtn.onclick = () => {
+    const tokenInput = optEl<HTMLInputElement>("token");
+    if (tokenInput) tokenInput.value = "";
+    const loginErr = optEl("login-error");
+    if (loginErr) loginErr.textContent = "";
+    const notice = optEl("login-exit-notice");
+    const loginForm = optEl("login-form");
+    if (notice && loginForm) {
+      loginForm.hidden = true;
+      notice.hidden = false;
+    }
+  };
+}
+
+const loginReopenBtn = optEl("login-reopen");
+if (loginReopenBtn) {
+  loginReopenBtn.onclick = () => {
+    const notice = optEl("login-exit-notice");
+    const loginForm = optEl("login-form");
+    if (notice && loginForm) {
+      notice.hidden = true;
+      loginForm.hidden = false;
+      optEl<HTMLInputElement>("token")?.focus();
+    }
+  };
 };
 el("new-session").onclick = () => void createSession().catch(fail);
 el("session-search").oninput = renderSessions;
