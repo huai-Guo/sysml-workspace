@@ -23,6 +23,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .contracts import KnowledgeInput, LoginInput, RunInput, SessionInput, SessionUpdate, public_job
 from .database import Database, Owner, ServiceError
+from .local_db import LocalDatabase
 from .pagination import decode_cursor, encode_cursor
 from .resilience import ComponentClient
 from .settings import Settings
@@ -41,11 +42,28 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     @asynccontextmanager
     async def lifespan(app):
-        app.state.db = database or Database(settings)
+        if database is not None:
+            app.state.db = database
+        else:
+            try:
+                if settings.database_url and "postgresql" in settings.database_url:
+                    app.state.db = Database(settings)
+                    await asyncio.to_thread(app.state.db.readiness)
+                else:
+                    raise RuntimeError("No PostgreSQL database configured")
+            except Exception as exc:
+                log.info(f"Using zero-config LocalDatabase: {exc}")
+                from .local_executor import LocalExecutor
+                app.state.db = LocalDatabase(settings=settings)
+                app.state.executor = LocalExecutor(app.state.db)
+
+        if not hasattr(app.state, "executor") and isinstance(app.state.db, LocalDatabase):
+            from .local_executor import LocalExecutor
+            app.state.executor = LocalExecutor(app.state.db)
+
         # Migrations are an explicit deployment step, never inferred on startup.
         app.state.components = ComponentClient()
         try:
-            await asyncio.to_thread(app.state.db.readiness)
             yield
         finally:
             await app.state.components.close()
@@ -83,6 +101,8 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     def owner(
         request: Request, authorization: str = Header(default=""), database: Database = Depends(db)
     ) -> Owner:
+        if isinstance(database, LocalDatabase):
+            return Owner("workspace", "developer")
         if authorization:
             if not authorization.startswith("Bearer ") or len(authorization) > 200:
                 raise ServiceError(401, "invalid_credentials")
@@ -153,8 +173,8 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
                 status_code=503,
                 headers={"Retry-After": "10"},
             )
-        except Exception:
-            # No request bodies, headers, provider messages or SQL parameters in logs.
+        except Exception as exc:
+            log.exception(f"Internal error on {request.url.path}: {exc}")
             log.error(json.dumps({"event": "internal_error", "request_id": request_id}))
             response = JSONResponse(
                 {"error": "internal_error", "request_id": request_id}, status_code=500
@@ -218,10 +238,11 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     @app.get("/v1/auth/session")
     def auth_session(request: Request, principal: Owner = Depends(owner)):
+        cookie = request.cookies.get(COOKIE_NAME, "local-session")
         return {
             "tenant_id": principal.tenant_id,
             "user_id": principal.user_id,
-            "csrf_token": csrf_value(request.cookies.get(COOKIE_NAME, "")),
+            "csrf_token": csrf_value(cookie),
         }
 
     @app.post("/v1/auth/logout", status_code=204)
@@ -301,7 +322,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         }
 
     @app.post("/v1/runs", status_code=202)
-    def submit(
+    async def submit(
         value: RunInput,
         response: Response,
         idempotency_key: str = Header(default=""),
@@ -310,7 +331,10 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     ):
         if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", idempotency_key):
             raise ServiceError(400, "idempotency_key_required")
-        row, created = database.submit(principal, value.model_dump(mode="json"), idempotency_key)
+        payload = value.model_dump(mode="json")
+        row, created = database.submit(principal, payload, idempotency_key)
+        if hasattr(app.state, "executor"):
+            app.state.executor.start_job(row["id"], payload)
         response.status_code = 202 if created else 200
         response.headers["Location"] = f"/v1/runs/{row['id']}"
         return public_job(row)
@@ -435,12 +459,23 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     @app.get("/")
     def index(request: Request):
-        return HTMLResponse(
+        content = (
             files("sysml_workspace.server")
             .joinpath("static/index.html")
             .read_text(encoding="utf-8")
             .replace("__CSP_NONCE__", request.state.csp_nonce)
         )
+        response = HTMLResponse(content)
+        if isinstance(request.app.state.db, LocalDatabase):
+            response.set_cookie(
+                COOKIE_NAME,
+                "local-session",
+                max_age=86400 * 30,
+                httponly=True,
+                samesite="lax",
+                path="/",
+            )
+        return response
 
     @app.get("/assets/{name}")
     def asset(name: str):

@@ -34,8 +34,10 @@ class Settings:
     allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1", "testserver")
 
     def __post_init__(self):
-        if not self.database_url.startswith(("postgresql://", "postgres://")):
-            raise ValueError("SYSML_DATABASE_URL must be a PostgreSQL connection URL")
+        if self.database_url and not self.database_url.startswith(
+            ("postgresql://", "postgres://", "sqlite://")
+        ):
+            raise ValueError("SYSML_DATABASE_URL must be a PostgreSQL or SQLite connection URL")
         for name in (
             "global_concurrency",
             "tenant_concurrency",
@@ -88,7 +90,7 @@ class Settings:
 
     @classmethod
     def from_env(cls):
-        values = {"database_url": os.environ.get("SYSML_DATABASE_URL", "")}
+        values = {"database_url": os.environ.get("SYSML_DATABASE_URL", "sqlite:///workspace.db")}
         for name, field_info in cls.__dataclass_fields__.items():
             raw = os.getenv("SYSML_" + name.upper())
             if raw is None or name == "database_url":

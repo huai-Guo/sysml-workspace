@@ -7,22 +7,23 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SessionInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     title: str = Field(default="新会话", min_length=1, max_length=200)
     memory_enabled: bool = True
 
 
 class LoginInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     access_token: str = Field(min_length=1, max_length=100)
 
 
 class DraftInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     task: Literal["generate", "revise", "repair", "validate", "extract", "render"] = "generate"
     request: str = Field(default="", max_length=12000)
     sysml_source: str = Field(default="", max_length=100000)
     render: bool = True
+    revision: int | None = None
 
     @model_validator(mode="after")
     def bounded_source(self):
@@ -32,7 +33,7 @@ class DraftInput(BaseModel):
 
 
 class SessionUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     revision: int = Field(ge=0)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     memory_enabled: bool | None = None
@@ -48,13 +49,14 @@ class SessionUpdate(BaseModel):
 
 
 class RunInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     session_id: UUID
     task: Literal["generate", "revise", "repair", "validate", "extract", "render"] = "generate"
     request: str = Field(default="", max_length=12000)
     sysml_source: str = Field(default="", max_length=100000)
     render: bool = False
     root_id: str | None = Field(default=None, max_length=256)
+    revision: int | None = None
 
     @model_validator(mode="after")
     def validate_input(self):
