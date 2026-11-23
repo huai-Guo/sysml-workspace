@@ -270,10 +270,9 @@ export class Results {
     if (diagCountEl) {
       diagCountEl.textContent = String(result.diagnostics?.length || 0);
     }
-    const diagCountCombo = optEl("diagnostic-count-combo");
-    if (diagCountCombo) {
-      diagCountCombo.textContent = String(result.diagnostics?.length || 0);
-    }
+    document.querySelectorAll('.tab-item[data-tab-id="diagnostics"] .badge-count').forEach((b) => {
+      b.textContent = String(result.diagnostics?.length || 0);
+    });
     this.entities();
     const diagnostics = optEl("diagnostics");
     if (diagnostics) {

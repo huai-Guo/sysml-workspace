@@ -85,6 +85,7 @@ function notice(text = "") {
   if (text) el("announcement").textContent = text;
 }
 function fail(error: unknown) {
+  console.error("SysML operation failed:", error);
   const message =
     error instanceof ApiError
       ? `${error.message}${error.requestId ? ` 请求编号：${error.requestId}` : ""}`
@@ -119,7 +120,8 @@ function updateSave() {
           ? "尚未保存"
           : "已保存";
   el("save-state").classList.toggle("unsaved", dirty || saveError);
-  el("draft-indicator").hidden = !dirty;
+  const draftInd = optEl("draft-indicator");
+  if (draftInd) draftInd.hidden = !dirty;
   el("conflict").hidden = !buffer?.conflict;
   results.stale(sourceEditor.value);
   const lineCount = sourceEditor.value ? sourceEditor.value.split("\n").length : 0;
@@ -906,7 +908,8 @@ async function enter(me: Identity) {
   el("workspace").hidden = false;
   el("login").hidden = true;
   el("identity").textContent = me.user_id;
-  el("tenant-name").textContent = me.tenant_id;
+  const tenantEl = optEl("tenant-name");
+  if (tenantEl) tenantEl.textContent = me.tenant_id;
   el("avatar").textContent = me.user_id.slice(0, 1).toUpperCase();
   el("login-error").textContent = "";
   await refreshCapabilities();
