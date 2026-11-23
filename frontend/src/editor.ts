@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import type { Extension } from "@codemirror/state";
 import {
   EditorView,
@@ -146,6 +146,7 @@ function toggleLineComment(view: EditorView): boolean {
 export class SourceEditor {
   view: EditorView;
   private silent = false;
+  private wrapCompartment = new Compartment();
   private extensions: Extension[];
   constructor(
     parent: HTMLElement,
@@ -164,6 +165,7 @@ export class SourceEditor {
       closeBrackets(),
       highlightActiveLine(),
       highlightSelectionMatches(),
+      this.wrapCompartment.of(EditorView.lineWrapping),
       sysml,
       syntaxHighlighting(defaultHighlightStyle),
       lintGutter(),
@@ -280,6 +282,15 @@ export class SourceEditor {
     this.view.setState(
       EditorState.create({ doc: value, extensions: this.extensions }),
     );
+  }
+  setLineWrapping(wrap: boolean) {
+    try {
+      this.view.dispatch({
+        effects: this.wrapCompartment.reconfigure(wrap ? EditorView.lineWrapping : []),
+      });
+    } catch {
+      // ignore
+    }
   }
   set value(value: string) {
     if (this.value === value) return;

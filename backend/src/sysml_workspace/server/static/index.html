@@ -4,8 +4,22 @@
 <body>
 <a href="#editor-region" class="skip-link">跳到模型编辑器</a>
 <section id="login" class="login-screen">
-  <div class="login-story"><div class="wordmark"><svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>SysML<span>Workbench</span></div><p class="eyebrow">A WORKSPACE FOR SYSTEMS THINKING</p><h1>让系统的每一个连接，<br>都有据可循。</h1><p class="login-intro">描述工程需求，编辑 SysML v2，<br>在同一工作台中验证代码、查看结构和追溯实体。</p><div class="login-steps"><span>01 <b>建模</b></span><i></i><span>02 <b>验证</b></span><i></i><span>03 <b>洞察</b></span></div><p class="login-note">你的模型、草稿与知识资料按账户隔离。</p></div>
-  <div class="login-form"><form id="login-form"><span class="small-label">欢迎回来</span><h2>进入你的工作空间</h2><p class="muted">使用管理员提供的访问令牌登录。</p><label for="token">访问令牌</label><input id="token" type="password" autocomplete="off" placeholder="粘贴访问令牌" required><button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button><p id="login-error" role="alert"></p><p class="fineprint">登录最长保持 8 小时。令牌不会保存在浏览器本地存储中；退出登录会立即结束本次会话。</p><button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button></form></div>
+  <div class="login-card">
+    <div class="login-header">
+      <div class="wordmark">
+        <svg viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>
+        SysML<span>Workbench</span>
+      </div>
+      <h2>进入工作空间</h2>
+    </div>
+    <form id="login-form">
+      <label for="token">访问令牌</label>
+      <input id="token" type="password" autocomplete="off" placeholder="输入或粘贴访问令牌" required>
+      <button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button>
+      <p id="login-error" role="alert"></p>
+      <button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button>
+    </form>
+  </div>
 </section>
 <div id="workspace" class="app-shell" hidden>
   <aside id="sidebar" class="sidebar" aria-label="工程与会话导航">
@@ -33,11 +47,11 @@
         <span class="section-tag">SysML v2</span>
       </div>
       <div class="project-files-list">
-        <div class="file-item active" id="active-file-item" title="当前主模型代码文件 (点击定位到编辑器)">
+        <div class="file-item active" id="active-file-item" title="model.sysml">
           <span class="file-icon">S</span>
           <div class="file-info">
             <strong class="file-title">model.sysml</strong>
-            <small id="sidebar-file-meta" class="file-meta">主模型文件</small>
+            <small id="sidebar-file-meta" class="file-meta">主模型</small>
           </div>
           <span class="file-badge">ACTIVE</span>
         </div>
@@ -55,12 +69,18 @@
 
     <div class="sidebar-tools">
       <button id="open-knowledge" class="nav-action">▤ <span>个人知识库</span></button>
-      <button id="open-status" class="nav-action"><i class="status-dot" id="service-dot"></i><span id="service-summary">服务状态</span></button>
     </div>
     <div class="account">
-      <span id="avatar" class="avatar">U</span>
-      <div class="account-info"><strong id="identity"></strong><small>个人工作空间</small></div>
-      <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button>
+      <div class="account-user">
+        <span id="avatar" class="avatar">U</span>
+        <strong id="identity" class="account-name"></strong>
+      </div>
+      <div class="account-actions">
+        <button id="open-settings" class="icon-button" title="设置" aria-label="偏好设置">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
+        </button>
+        <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button>
+      </div>
     </div>
   </aside>
   <div class="work-area">
@@ -93,7 +113,6 @@
         <button id="btn-layout-split" class="button ghost compact" title="切换分栏方向 (左右 / 上下)"></button>
         <button id="btn-layout-reset" class="icon-button" title="重置分栏布局 (50/50)">↺</button>
         <button id="open-knowledge" class="button ghost compact" title="工程规范与参考知识库">▤ 知识库</button>
-        <button id="open-status" class="button ghost compact"><i class="status-dot" id="service-dot"></i><span id="service-summary">服务状态</span></button>
         <button id="model-settings" class="icon-button" aria-label="模型设置" title="模型设置">⋯</button>
       </div>
     </header>
@@ -116,8 +135,7 @@
         </div>
         <div id="source-editor" class="source-editor"></div>
         <div class="editor-status">
-          <span id="source-count">0 行 · UTF-8</span>
-          <span class="editor-shortcuts-hint"><kbd>Shift+Alt+F</kbd> 排版 · <kbd>Ctrl+/</kbd> 注释 · <kbd>Ctrl+↵</kbd> 运行</span>
+          <span id="editor-line-count" class="source-line-count">0 行</span>
           <button id="load-example" class="text-button">插入电力系统示例</button>
         </div>
         <!-- Hidden underlying form for state backwards-compatibility -->
@@ -164,7 +182,7 @@
             <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" hidden>运行记录</button>
           </div>
           <div class="result-actions">
-            <span id="run-status" class="status-badge neutral">就绪</span>
+            <span id="run-status" class="status-badge neutral" hidden></span>
             <button id="btn-maximize-result" class="icon-button window-btn" title="最大化/还原右侧区">⤢</button>
           </div>
         </div>
@@ -180,7 +198,7 @@
         <!-- 1. Diagram View -->
         <div id="tab-diagram" class="result-tab diagram-tab" role="tabpanel" aria-labelledby="tab-button-diagram">
           <div class="diagram-toolbar">
-            <span id="diagram-summary">语义结构概览</span>
+            <span id="diagram-summary" class="diagram-summary"></span>
             <div class="diagram-controls">
               <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新结构图">🔄 刷新渲染</button>
               <button id="zoom-out" class="icon-button" aria-label="缩小图片">−</button>
@@ -193,19 +211,17 @@
             <img id="diagram-image" alt="已验证 SysML 的语义结构图" hidden>
             <div id="diagram-empty" class="empty-state">
               <svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg>
-              <h3>从一份模型，看清系统结构</h3>
-              <p>在左侧编写 SysML，点击【运行渲染】生成结构图；或在 AI 助手输入自然语言需求。</p>
+              <h3>尚未生成结构图</h3>
+              <p>在左侧编写 SysML 点击【运行渲染】，或在右侧向 AI 助手提出建模修改需求。</p>
               <button id="empty-example" class="button secondary">打开示例模型 <span aria-hidden="true">↗</span></button>
             </div>
           </div>
-          <div id="diagram-coverage" class="panel-footnote">仅显示已解析的语义结构；可通过鼠标拖拽与缩放。</div>
         </div>
 
         <!-- 2. Dedicated AI Copilot Tab -->
         <div id="tab-copilot" class="result-tab copilot-tab" role="tabpanel" aria-labelledby="tab-button-copilot" hidden>
           <div class="copilot-header">
-            <span class="copilot-model-badge">🤖 glm-5.3 · Volcengine Gateway</span>
-            <span class="copilot-status-note">伴随式建模 / 增量修改 / 语法自愈</span>
+            <span class="copilot-model-badge">🤖 glm-5.3</span>
           </div>
           <div id="copilot-chat" class="copilot-chat">
             <div class="copilot-msg assistant">
@@ -256,11 +272,79 @@
         </div>
       </section>
     </div>
-    <footer class="status-bar"><span><i class="status-dot" id="connection-dot"></i><span id="connection-label">正在连接</span></span><span id="memory-label">会话记忆已开启</span><span>语言验证与工程意图评审分别进行</span></footer>
+    <footer class="status-bar">
+      <div class="status-bar-left">
+        <span id="source-count">0 行</span>
+        <span id="save-state" class="save-state"><i class="save-dot"></i>已保存</span>
+      </div>
+      <div class="status-bar-right">
+        <span id="memory-label" class="status-pill">记忆开启</span>
+        <span class="status-pill">UTF-8</span>
+        <span class="status-pill">SysML v2</span>
+        <span class="status-pill">glm-5.3</span>
+      </div>
+    </footer>
   </div>
 </div>
 <dialog id="modal" aria-labelledby="modal-title"><h2 id="modal-title"></h2><p id="modal-description"></p><label class="sr-only" for="modal-input">模型名称</label><input id="modal-input" maxlength="200" hidden><div id="modal-actions" class="dialog-actions"></div></dialog>
-<dialog id="knowledge-modal" class="wide-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><span class="small-label">KNOWLEDGE</span><h2 id="knowledge-title">个人知识库</h2></div><button id="close-knowledge" class="icon-button" aria-label="关闭知识库">×</button></div><p class="muted">添加工程约束或建模规范。资料仅对你的账户可见，用于检索参考。</p><div id="documents"></div><form id="knowledge-form"><label for="document-title">资料名称</label><input id="document-title" maxlength="200" required placeholder="例如：电气建模规范"><label for="document-content">资料内容</label><textarea id="document-content" rows="5" required placeholder="粘贴资料正文，最多 32 KiB"></textarea><p id="knowledge-error" role="alert"></p><div class="dialog-actions"><button id="save-document" type="submit" class="button primary">保存资料</button></div></form></dialog>
-<dialog id="status-modal" aria-labelledby="status-title"><div class="dialog-heading"><h2 id="status-title">服务状态</h2><button id="close-status" class="icon-button" aria-label="关闭服务状态">×</button></div><div id="capabilities"></div><p class="fineprint">状态来自近期 worker 心跳和内部服务就绪检查。模型显示“已配置”不代表供应商当前可用，也不会因此发起收费探测。</p></dialog>
+<dialog id="knowledge-modal" class="wide-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><span class="small-label">KNOWLEDGE</span><h2 id="knowledge-title">个人知识库</h2></div><button id="close-knowledge" class="icon-button" aria-label="关闭知识库">×</button></div><div id="documents"></div><form id="knowledge-form"><label for="document-title">资料名称</label><input id="document-title" maxlength="200" required placeholder="例如：电气建模规范"><label for="document-content">资料内容</label><textarea id="document-content" rows="5" required placeholder="粘贴资料正文，最多 32 KiB"></textarea><p id="knowledge-error" role="alert"></p><div class="dialog-actions"><button id="save-document" type="submit" class="button primary">保存资料</button></div></form></dialog>
+<dialog id="status-modal" aria-labelledby="status-title" hidden><div class="dialog-heading"><h2 id="status-title">服务状态</h2><button id="close-status" class="icon-button" aria-label="关闭服务状态">×</button></div><div id="capabilities"></div></dialog>
+<dialog id="settings-modal" class="settings-dialog" aria-labelledby="settings-title">
+  <div class="dialog-heading">
+    <div class="settings-modal-header">
+      <h2 id="settings-title">偏好设置 (Settings)</h2>
+    </div>
+    <button id="close-settings" class="icon-button" aria-label="关闭设置">×</button>
+  </div>
+  <div class="settings-body">
+    <div class="settings-section">
+      <label class="settings-label" for="setting-theme">界面主题 (Theme)</label>
+      <select id="setting-theme" class="settings-select">
+        <option value="codex-dark">Codex 经典墨黑 (默认)</option>
+        <option value="midnight">Midnight 极光深蓝</option>
+        <option value="oled">OLED 纯黑极客</option>
+        <option value="light">High Contrast 亮色</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="setting-font-family">代码字体 (Font Family)</label>
+      <select id="setting-font-family" class="settings-select">
+        <option value="jetbrains">JetBrains Mono (推荐)</option>
+        <option value="fira">Fira Code</option>
+        <option value="cascadia">Cascadia Code</option>
+        <option value="consolas">Consolas / Courier</option>
+        <option value="system">系统等宽 (System Monospace)</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="setting-font-size">代码字号 (Font Size)</label>
+      <select id="setting-font-size" class="settings-select">
+        <option value="12px">12 px · 紧凑</option>
+        <option value="13px" selected>13 px · 标准</option>
+        <option value="14px">14 px · 舒适</option>
+        <option value="15px">15 px · 放大</option>
+        <option value="16px">16 px · 特大</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="setting-tab-size">缩进空格 (Tab Size)</label>
+      <select id="setting-tab-size" class="settings-select">
+        <option value="2">2 空格</option>
+        <option value="4" selected>4 空格</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="setting-line-wrap">自动折行 (Line Wrapping)</label>
+      <select id="setting-line-wrap" class="settings-select">
+        <option value="on" selected>开启折行</option>
+        <option value="off">不折行 (横向滚动)</option>
+      </select>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <button id="reset-settings" class="button ghost">恢复默认</button>
+    <button id="save-settings" class="button primary">完成</button>
+  </div>
+</dialog>
 <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
 </body></html>

@@ -10,7 +10,8 @@ import {
 } from "./state";
 import { SourceEditor } from "./editor";
 import { Results, taskNames, badge, time } from "./results";
-import { el, node, action, dialog, download } from "./dom";
+import { el, optEl, node, action, dialog, download } from "./dom";
+import { initSettings } from "./settings";
 import type {
   Identity,
   Session,
@@ -57,6 +58,10 @@ const sourceEditor = new SourceEditor(
   () => void submitRun(),
   () => void save().catch(fail),
 );
+const initialSettings = initSettings((settings) => {
+  sourceEditor.setLineWrapping(settings.lineWrap === "on");
+});
+sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
 const results = new Results(api, fail, (source) => void applySource(source));
 const example = `package Electrical {
     port def Power;
@@ -117,8 +122,11 @@ function updateSave() {
   el("draft-indicator").hidden = !dirty;
   el("conflict").hidden = !buffer?.conflict;
   results.stale(sourceEditor.value);
-  const lineCount = sourceEditor.value.split("\n").length;
-  el("source-count").textContent = `${lineCount} 行 · UTF-8`;
+  const lineCount = sourceEditor.value ? sourceEditor.value.split("\n").length : 0;
+  const lineText = `${lineCount} 行`;
+  document.querySelectorAll(".source-line-count, #source-count, #editor-line-count").forEach((node) => {
+    node.textContent = lineText;
+  });
   const fileMeta = document.getElementById("sidebar-file-meta");
   if (fileMeta) {
     fileMeta.textContent = `${lineCount} 行 · UTF-8`;
@@ -154,7 +162,8 @@ function updateControls() {
   button.disabled = submitting || switching || !sessionId || !available;
   el<HTMLButtonElement>("new-session").disabled =
     creating || switching || submitting;
-  el<HTMLButtonElement>("model-settings").disabled = switching || !sessionId;
+  const modelSettingsBtn = optEl<HTMLButtonElement>("model-settings");
+  if (modelSettingsBtn) modelSettingsBtn.disabled = switching || !sessionId;
   el<HTMLButtonElement>("rename-session").disabled = switching || !sessionId;
   el<HTMLButtonElement>("save-draft").disabled = switching || !buffer;
 }
@@ -459,53 +468,62 @@ async function refreshCapabilities() {
     if (!authGate.accepts(epoch)) return;
     capabilities = value;
     const good = value.workers > 0;
-    el("connection-label").textContent = good
-      ? "服务已连接"
-      : "等待执行服务恢复";
-    el("connection-dot").className = `status-dot ${good ? "good" : "warn"}`;
+    const connLabel = optEl("connection-label");
+    if (connLabel) connLabel.textContent = good ? "服务已连接" : "等待执行服务恢复";
+    const connDot = optEl("connection-dot");
+    if (connDot) connDot.className = `status-dot ${good ? "good" : "warn"}`;
     const degraded =
       !value.capabilities.includes("render") ||
       !value.capabilities.includes("rag");
-    el("service-summary").textContent = good
-      ? degraded
-        ? "部分服务不可用"
-        : "服务运行正常"
-      : "执行服务不可用";
-    el("service-dot").className =
-      `status-dot ${good && !degraded ? "good" : "warn"}`;
-    const rows = el("capabilities");
-    rows.replaceChildren();
-    for (const [name, label] of [
-      ["validate", "语言验证 / 实体提取"],
-      ["render", "结构图"],
-      ["rag", "知识检索"],
-      ["generate", "付费模型"],
-    ]) {
-      const row = node("div", "", "capability-row");
-      row.append(
-        node("span", label),
-        node(
-          "span",
-          value.capabilities.includes(name)
-            ? name === "generate"
-              ? "已配置"
-              : "可用"
-            : name === "generate"
-              ? "未配置或无 worker"
-              : "不可用",
-          `status-badge ${value.capabilities.includes(name) ? "" : "neutral"}`,
-        ),
-      );
-      rows.append(row);
+    const servSumm = optEl("service-summary");
+    if (servSumm) {
+      servSumm.textContent = good
+        ? degraded
+          ? "部分服务不可用"
+          : "服务运行正常"
+        : "执行服务不可用";
+    }
+    const servDot = optEl("service-dot");
+    if (servDot) servDot.className = `status-dot ${good && !degraded ? "good" : "warn"}`;
+    const rows = optEl("capabilities");
+    if (rows) {
+      rows.replaceChildren();
+      for (const [name, label] of [
+        ["validate", "语言验证 / 实体提取"],
+        ["render", "结构图"],
+        ["rag", "知识检索"],
+        ["generate", "付费模型"],
+      ]) {
+        const row = node("div", "", "capability-row");
+        row.append(
+          node("span", label),
+          node(
+            "span",
+            value.capabilities.includes(name)
+              ? name === "generate"
+                ? "已配置"
+                : "可用"
+              : name === "generate"
+                ? "未配置或无 worker"
+                : "不可用",
+            `status-badge ${value.capabilities.includes(name) ? "" : "neutral"}`,
+          ),
+        );
+        rows.append(row);
+      }
     }
     updateControls();
   } catch (error) {
     if (!authGate.accepts(epoch)) return;
     capabilities = undefined;
-    el("connection-label").textContent = "连接中断，正在重连";
-    el("connection-dot").className = "status-dot bad";
-    el("service-summary").textContent = "服务连接中断";
-    el("service-dot").className = "status-dot bad";
+    const connLabel = optEl("connection-label");
+    if (connLabel) connLabel.textContent = "连接中断，正在重连";
+    const connDot = optEl("connection-dot");
+    if (connDot) connDot.className = "status-dot bad";
+    const servSumm = optEl("service-summary");
+    if (servSumm) servSumm.textContent = "服务连接中断";
+    const servDot = optEl("service-dot");
+    if (servDot) servDot.className = "status-dot bad";
     updateControls();
     if (error instanceof ApiError && error.status === 401) fail(error);
   }
@@ -757,7 +775,7 @@ function notifyCopilotRunFailed(run: Run) {
   body.append(
     node(
       "p",
-      `❌ 任务【${taskNames[run.task] || run.task}】执行未完全成功：${run.error || "请检查模型连接与输入需求。"}`,
+      `❌ 任务【${taskNames[run.task] || run.task}】执行未完全成功：${run.result?.error_message || run.error_code || "请检查模型连接与输入需求。"}`,
     ),
   );
 
@@ -985,7 +1003,9 @@ el("rename-session").onclick = async () => {
     await save().catch(fail);
   }
 };
-el("model-settings").onclick = async () => {
+const modelSettingsBtn = optEl("model-settings");
+if (modelSettingsBtn) {
+  modelSettingsBtn.onclick = async () => {
   if (!buffer) return;
   const choice = await dialog(
     "模型设置",
@@ -1033,6 +1053,7 @@ el("model-settings").onclick = async () => {
     }
   }
 };
+}
 el("task").onchange = () => {
   if (buffer)
     edit({
@@ -1221,12 +1242,17 @@ el<HTMLFormElement>("knowledge-form").onsubmit = async (event) => {
     el<HTMLButtonElement>("save-document").disabled = false;
   }
 };
-el("open-status").onclick = () => {
-  el<HTMLDialogElement>("status-modal").showModal();
-  void refreshCapabilities();
-};
-el("close-status").onclick = () =>
-  el<HTMLDialogElement>("status-modal").close();
+const openStatusBtn = optEl("open-status");
+if (openStatusBtn) {
+  openStatusBtn.onclick = () => {
+    optEl<HTMLDialogElement>("status-modal")?.showModal();
+    void refreshCapabilities();
+  };
+}
+const closeStatusBtn = optEl("close-status");
+if (closeStatusBtn) {
+  closeStatusBtn.onclick = () => optEl<HTMLDialogElement>("status-modal")?.close();
+}
 el("format-code").onclick = () => {
   sourceEditor.format();
 };
@@ -1296,16 +1322,17 @@ async function loadCopilotChat(sessId: string) {
       `/v1/sessions/${sessId}/runs?limit=30`,
     );
     const modelRuns = page.items
-      .filter(
-        (r) =>
-          ["generate", "revise", "repair"].includes(r.task) && r.request,
+      .filter((r) =>
+        ["generate", "revise", "repair"].includes(r.task) &&
+        Boolean(r.input?.request || r.request_preview),
       )
       .reverse();
 
     if (modelRuns.length > 0) {
       for (const r of modelRuns) {
-        if (r.request) {
-          appendCopilotMsg("user", r.request);
+        const userPrompt = r.input?.request || r.request_preview;
+        if (userPrompt) {
+          appendCopilotMsg("user", userPrompt);
         }
         if (r.status === "succeeded" && r.result?.sysml_source) {
           notifyCopilotRunComplete(r);

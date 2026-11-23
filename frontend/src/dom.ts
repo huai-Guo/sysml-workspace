@@ -3,6 +3,9 @@ export function el<T extends HTMLElement = HTMLElement>(id: string): T {
   if (!value) throw new Error(`Missing UI element: ${id}`);
   return value as T;
 }
+export function optEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
 export function node<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   text = "",

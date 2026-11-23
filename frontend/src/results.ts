@@ -1,4 +1,4 @@
-import { el, node, action, download } from "./dom";
+import { el, optEl, node, action, download } from "./dom";
 import { ApiClient, messages } from "./api";
 import { SourceEditor } from "./editor";
 import { active } from "./state";
@@ -171,67 +171,96 @@ export class Results {
     el("diagram-viewport").classList.remove("has-diagram");
     for (const id of ["run-progress", "result-error", "stale-result"])
       el(id).hidden = true;
-    for (const id of ["entities", "diagnostics", "timeline", "run-facts"])
-      el(id).replaceChildren();
-    for (const id of ["entity-count", "diagnostic-count"])
-      el(id).textContent = "0";
+    for (const id of ["entities", "diagnostics", "timeline", "run-facts"]) {
+      const target = optEl(id);
+      if (target) target.replaceChildren();
+    }
+    for (const id of ["entity-count", "diagnostic-count"]) {
+      const target = optEl(id);
+      if (target) target.textContent = "0";
+    }
     for (const button of document.querySelectorAll<HTMLButtonElement>(
       "[data-download],#copy-result,#apply-result,#zoom-in,#zoom-out,#zoom-fit",
     ))
       button.disabled = true;
-    el("run-status").textContent = "尚未运行";
-    el("run-status").className = badge("idle");
-    el("quality").textContent = "尚未运行模型验证。";
-    el("quality").className = "quality";
-    el("run-reference").textContent = "";
-    el("diagram-summary").textContent = "语义结构概览";
-    el("diagram-coverage").textContent =
-      "仅显示已解析的语义结构；不是所有 SysML 图种。";
-    el("result-hash").textContent = "运行后可追溯到源代码版本。";
+    const runStatusEl = optEl("run-status");
+    if (runStatusEl) {
+      runStatusEl.textContent = "";
+      runStatusEl.className = "status-badge neutral";
+    }
+    const qualityEl = optEl("quality");
+    if (qualityEl) {
+      qualityEl.textContent = "";
+      qualityEl.className = "quality";
+    }
+    const runRefEl = optEl("run-reference");
+    if (runRefEl) runRefEl.textContent = "";
+    const diagSumm = optEl("diagram-summary");
+    if (diagSumm) diagSumm.textContent = "";
+    const diagCov = optEl("diagram-coverage");
+    if (diagCov) diagCov.textContent = "";
+    const resHash = optEl("result-hash");
+    if (resHash) resHash.textContent = "";
   }
   show(job: Run) {
     if (this.current?.id !== job.id) this.reset();
     this.current = job;
-    el("run-status").textContent =
-      job.status === "failed" && job.result?.valid
-        ? "部分完成"
-        : statuses[job.status];
-    el("run-status").className = badge(job.status);
-    el("run-progress").hidden = !active(job.status);
-    el("phase-label").textContent =
-      phaseNames[job.phase] || statuses[job.status];
+    const runStatusEl = optEl("run-status");
+    if (runStatusEl) {
+      runStatusEl.textContent =
+        job.status === "failed" && job.result?.valid
+          ? "部分完成"
+          : statuses[job.status];
+      runStatusEl.className = badge(job.status);
+    }
+    const runProg = optEl("run-progress");
+    if (runProg) runProg.hidden = !active(job.status);
+    const phaseLabel = optEl("phase-label");
+    if (phaseLabel) {
+      phaseLabel.textContent =
+        phaseNames[job.phase] || statuses[job.status];
+    }
     this.elapsed();
-    el("cancel-run").hidden = !active(job.status);
+    const cancelRun = optEl("cancel-run");
+    if (cancelRun) cancelRun.hidden = !active(job.status);
     const code = job.error_code || job.result?.error_message;
-    el("result-error").hidden = !code;
-    el("result-error").textContent = code
-      ? messages[code] || `任务未完成（${code}），可查看诊断或联系管理员。`
-      : "";
-    const timeline = el("timeline");
-    timeline.replaceChildren(node("li", `${time(job.created_at)} · 已入队`));
-    for (const event of job.events || [])
-      timeline.append(
-        node(
-          "li",
-          `${time(event.at)} · ${phaseNames[event.phase] || event.phase} · 第 ${event.attempt} 次执行`,
-        ),
-      );
-    if (!active(job.status))
-      timeline.append(
-        node("li", `${time(job.updated_at)} · ${statuses[job.status]}`),
-      );
-    el("run-reference").textContent = `运行编号 ${job.id}`;
+    const resErr = optEl("result-error");
+    if (resErr) {
+      resErr.hidden = !code;
+      resErr.textContent = code
+        ? messages[code] || `任务未完成（${code}），可查看诊断或联系管理员。`
+        : "";
+    }
+    const timeline = optEl("timeline");
+    if (timeline) {
+      timeline.replaceChildren(node("li", `${time(job.created_at)} · 已入队`));
+      for (const event of job.events || [])
+        timeline.append(
+          node(
+            "li",
+            `${time(event.at)} · ${phaseNames[event.phase] || event.phase} · 第 ${event.attempt} 次执行`,
+          ),
+        );
+      if (!active(job.status))
+        timeline.append(
+          node("li", `${time(job.updated_at)} · ${statuses[job.status]}`),
+        );
+    }
+    const runRef = optEl("run-reference");
+    if (runRef) runRef.textContent = `运行编号 ${job.id}`;
     const result = job.result;
     if (!result) return;
     this.resultEditor.reset(result.sysml_source || "");
     this.resultEditor.diagnostics(result.diagnostics || []);
-    el("quality").textContent = result.valid
-      ? "语言验证通过。工程意图的正确性仍需评审。"
-      : "代码尚未通过验证，请检查诊断后再使用。";
-    el("quality").className = `quality ${result.valid ? "" : "invalid"}`;
-    el("result-hash").textContent = result.final_artifact_sha256
-      ? `SHA-256 · ${result.final_artifact_sha256}`
-      : "本次没有生成源代码产物。";
+    const qual = optEl("quality");
+    if (qual) {
+      qual.textContent = result.valid
+        ? "语言验证通过"
+        : "存在语法或语义错误，请检查诊断";
+      qual.className = `quality ${result.valid ? "" : "invalid"}`;
+    }
+    const resHash = optEl("result-hash");
+    if (resHash) resHash.textContent = result.final_artifact_sha256 ? `SHA-256 · ${result.final_artifact_sha256}` : "";
     el("entity-count").textContent = String(
       result.semantic_model?.entities.length || 0,
     );
@@ -316,12 +345,16 @@ export class Results {
       for (const id of ["zoom-in", "zoom-out", "zoom-fit"])
         el<HTMLButtonElement>(id).disabled = false;
       const cov = result.diagram.coverage;
-      el("diagram-summary").textContent = cov
-        ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
-        : "语义结构概览";
-      el("diagram-coverage").textContent = cov
-        ? `未显示 ${cov.omitted_entities} 个匿名、外部或范围外元素。结构概览不代表所有 SysML 图种。`
-        : "语义结构概览";
+      const diagSumm = optEl("diagram-summary");
+      if (diagSumm) {
+        diagSumm.textContent = cov
+          ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
+          : "";
+      }
+      const diagCov = optEl("diagram-coverage");
+      if (diagCov) {
+        diagCov.textContent = "";
+      }
     }
   }
   private entities() {
