@@ -1,42 +1,46 @@
-export type SplitDirection = "row" | "column";
-
 export class LayoutManager {
-  private direction: SplitDirection = "row";
-  private ratio = 52; // percentage for editor pane
+  private ratioMainX = 62; // percentage for left main area (editor + view)
+  private ratioLeftY = 50; // percentage for editor height within left main area
   private sidebarOpen = true;
-  private maximized: "editor" | "result" | null = null;
+  private maximized: "editor" | "view" | "copilot" | null = null;
 
   private workbenchEl!: HTMLElement;
+  private mainColEl!: HTMLElement;
   private editorPane!: HTMLElement;
-  private resultPane!: HTMLElement;
-  private resizerEl!: HTMLElement;
+  private viewPane!: HTMLElement;
+  private copilotPane!: HTMLElement;
+  private splitterMainX!: HTMLElement;
+  private splitterLeftY!: HTMLElement;
   private sidebarEl!: HTMLElement;
-  private splitBtn!: HTMLButtonElement;
-  private maxEditorBtn!: HTMLButtonElement;
-  private maxResultBtn!: HTMLButtonElement;
+
+  private maxEditorBtn!: HTMLButtonElement | null;
+  private maxViewBtn!: HTMLButtonElement | null;
+  private maxCopilotBtn!: HTMLButtonElement | null;
 
   init() {
     this.workbenchEl = document.querySelector(".workbench") as HTMLElement;
-    this.editorPane = document.querySelector(".editor-pane") as HTMLElement;
-    this.resultPane = document.querySelector(".result-pane") as HTMLElement;
-    this.resizerEl = document.getElementById("pane-resizer") as HTMLElement;
+    this.mainColEl = document.getElementById("workbench-main") as HTMLElement;
+    this.editorPane = document.getElementById("editor-region") as HTMLElement;
+    this.viewPane = document.getElementById("view-region") as HTMLElement;
+    this.copilotPane = document.getElementById("copilot-region") as HTMLElement;
+    this.splitterMainX = document.getElementById("splitter-main-copilot") as HTMLElement;
+    this.splitterLeftY = document.getElementById("splitter-editor-view") as HTMLElement;
     this.sidebarEl = document.getElementById("sidebar") as HTMLElement;
 
-    this.splitBtn = document.getElementById("btn-layout-split") as HTMLButtonElement;
-    this.maxEditorBtn = document.getElementById("btn-maximize-editor") as HTMLButtonElement;
-    this.maxResultBtn = document.getElementById("btn-maximize-result") as HTMLButtonElement;
+    this.maxEditorBtn = document.getElementById("btn-maximize-editor") as HTMLButtonElement | null;
+    this.maxViewBtn = document.getElementById("btn-maximize-view") as HTMLButtonElement | null;
+    this.maxCopilotBtn = document.getElementById("btn-maximize-copilot") as HTMLButtonElement | null;
 
     // Load saved preferences
-    const savedDir = localStorage.getItem("sysml_layout_dir") as SplitDirection | null;
-    if (savedDir === "row" || savedDir === "column") {
-      this.direction = savedDir;
+    const savedRatioX = localStorage.getItem("sysml_split_main_x");
+    if (savedRatioX) {
+      const num = parseFloat(savedRatioX);
+      if (!isNaN(num) && num >= 25 && num <= 85) this.ratioMainX = num;
     }
-    const savedRatio = localStorage.getItem("sysml_layout_ratio");
-    if (savedRatio) {
-      const num = parseFloat(savedRatio);
-      if (!isNaN(num) && num >= 15 && num <= 85) {
-        this.ratio = num;
-      }
+    const savedRatioY = localStorage.getItem("sysml_split_main_y");
+    if (savedRatioY) {
+      const num = parseFloat(savedRatioY);
+      if (!isNaN(num) && num >= 15 && num <= 85) this.ratioLeftY = num;
     }
     const savedSidebar = localStorage.getItem("sysml_sidebar_open");
     if (savedSidebar !== null) {
@@ -47,30 +51,64 @@ export class LayoutManager {
     this.bindEvents();
   }
 
-  private apply() {
+  apply() {
     if (!this.workbenchEl) return;
 
-    // Apply direction
-    this.workbenchEl.classList.toggle("layout-row", this.direction === "row");
-    this.workbenchEl.classList.toggle("layout-column", this.direction === "column");
-
-    // Apply maximized state
+    // Apply maximized state classes
     this.workbenchEl.classList.toggle("maximized-editor", this.maximized === "editor");
-    this.workbenchEl.classList.toggle("maximized-result", this.maximized === "result");
+    this.workbenchEl.classList.toggle("maximized-view", this.maximized === "view");
+    this.workbenchEl.classList.toggle("maximized-copilot", this.maximized === "copilot");
 
-    if (this.maximized) {
-      this.editorPane.style.flex = "";
-      this.resultPane.style.flex = "";
-    } else {
-      if (this.direction === "row") {
-        this.editorPane.style.flex = `0 0 ${this.ratio}%`;
-        this.editorPane.style.height = "";
-        this.resultPane.style.flex = "1 1 0";
-      } else {
-        this.editorPane.style.flex = `0 0 ${this.ratio}%`;
-        this.editorPane.style.width = "";
-        this.resultPane.style.flex = "1 1 0";
+    if (this.maximized === "copilot") {
+      if (this.mainColEl) this.mainColEl.style.display = "none";
+      if (this.copilotPane) {
+        this.copilotPane.style.display = "flex";
+        this.copilotPane.style.flex = "1 1 100%";
       }
+      if (this.splitterMainX) this.splitterMainX.style.display = "none";
+    } else if (this.maximized === "editor" || this.maximized === "view") {
+      if (this.copilotPane) this.copilotPane.style.display = "none";
+      if (this.splitterMainX) this.splitterMainX.style.display = "none";
+      if (this.mainColEl) {
+        this.mainColEl.style.display = "flex";
+        this.mainColEl.style.flex = "1 1 100%";
+      }
+      if (this.maximized === "editor") {
+        if (this.editorPane) {
+          this.editorPane.style.display = "flex";
+          this.editorPane.style.flex = "1 1 100%";
+        }
+        if (this.viewPane) this.viewPane.style.display = "none";
+        if (this.splitterLeftY) this.splitterLeftY.style.display = "none";
+      } else {
+        if (this.editorPane) this.editorPane.style.display = "none";
+        if (this.viewPane) {
+          this.viewPane.style.display = "flex";
+          this.viewPane.style.flex = "1 1 100%";
+        }
+        if (this.splitterLeftY) this.splitterLeftY.style.display = "none";
+      }
+    } else {
+      // Normal split state
+      if (this.mainColEl) {
+        this.mainColEl.style.display = "flex";
+        this.mainColEl.style.flex = `0 0 ${this.ratioMainX}%`;
+      }
+      if (this.copilotPane) {
+        this.copilotPane.style.display = "flex";
+        this.copilotPane.style.flex = `1 1 0`;
+      }
+      if (this.splitterMainX) this.splitterMainX.style.display = "";
+
+      if (this.editorPane) {
+        this.editorPane.style.display = "flex";
+        this.editorPane.style.flex = `0 0 ${this.ratioLeftY}%`;
+      }
+      if (this.viewPane) {
+        this.viewPane.style.display = "flex";
+        this.viewPane.style.flex = "1 1 0";
+      }
+      if (this.splitterLeftY) this.splitterLeftY.style.display = "";
     }
 
     // Apply sidebar state
@@ -79,42 +117,30 @@ export class LayoutManager {
       shell.classList.toggle("sidebar-collapsed", !this.sidebarOpen);
     }
 
-    // Update button labels
-    if (this.splitBtn) {
-      this.splitBtn.innerHTML = this.direction === "row" 
-        ? `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm6 1H2v8h6V4zm1 8h5V4H9v8z"/></svg> 左右分栏` 
-        : `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm0 1v3h12V4H2zm12 5H2v3h12V9z"/></svg> 上下分栏`;
-      this.splitBtn.title = this.direction === "row" ? "切换为上下分栏布局" : "切换为左右分栏布局";
-    }
-
+    // Update maximize buttons icon & title
     if (this.maxEditorBtn) {
       this.maxEditorBtn.innerHTML = this.maximized === "editor" ? "🗗" : "⤢";
-      this.maxEditorBtn.title = this.maximized === "editor" ? "还原窗格" : "最大化编辑区";
+      this.maxEditorBtn.title = this.maximized === "editor" ? "还原窗格" : "最大化编辑器";
+    }
+    if (this.maxViewBtn) {
+      this.maxViewBtn.innerHTML = this.maximized === "view" ? "🗗" : "⤢";
+      this.maxViewBtn.title = this.maximized === "view" ? "还原窗格" : "最大化视图";
+    }
+    if (this.maxCopilotBtn) {
+      this.maxCopilotBtn.innerHTML = this.maximized === "copilot" ? "🗗" : "⤢";
+      this.maxCopilotBtn.title = this.maximized === "copilot" ? "还原窗格" : "最大化 AI 助手";
     }
 
-    if (this.maxResultBtn) {
-      this.maxResultBtn.innerHTML = this.maximized === "result" ? "🗗" : "⤢";
-      this.maxResultBtn.title = this.maximized === "result" ? "还原窗格" : "最大化右侧区";
-    }
-
-    // Notify window resize so diagram / CodeMirror measure properly
     window.dispatchEvent(new Event("resize"));
   }
 
-  toggleDirection() {
-    this.direction = this.direction === "row" ? "column" : "row";
-    localStorage.setItem("sysml_layout_dir", this.direction);
-    this.maximized = null;
-    this.apply();
-  }
-
   resetLayout() {
-    this.ratio = 52;
-    this.direction = "row";
+    this.ratioMainX = 62;
+    this.ratioLeftY = 50;
     this.maximized = null;
     this.sidebarOpen = true;
-    localStorage.setItem("sysml_layout_ratio", "52");
-    localStorage.setItem("sysml_layout_dir", "row");
+    localStorage.setItem("sysml_split_main_x", "62");
+    localStorage.setItem("sysml_split_main_y", "50");
     localStorage.setItem("sysml_sidebar_open", "true");
     this.apply();
   }
@@ -125,7 +151,7 @@ export class LayoutManager {
     this.apply();
   }
 
-  toggleMaximize(target: "editor" | "result") {
+  toggleMaximize(target: "editor" | "view" | "copilot") {
     if (this.maximized === target) {
       this.maximized = null;
     } else {
@@ -134,12 +160,25 @@ export class LayoutManager {
     this.apply();
   }
 
-  private bindEvents() {
-    // Split toggle button
-    if (this.splitBtn) {
-      this.splitBtn.onclick = () => this.toggleDirection();
+  focusEditor() {
+    if (this.maximized === "view" || this.maximized === "copilot") {
+      this.maximized = null;
+      this.apply();
     }
+    const ed = document.getElementById("source-editor");
+    ed?.scrollIntoView({ behavior: "smooth" });
+  }
 
+  focusView() {
+    if (this.maximized === "editor" || this.maximized === "copilot") {
+      this.maximized = null;
+      this.apply();
+    }
+    const view = document.getElementById("view-region");
+    view?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  private bindEvents() {
     // Reset layout button
     const resetBtn = document.getElementById("btn-layout-reset");
     if (resetBtn) {
@@ -156,60 +195,95 @@ export class LayoutManager {
     if (this.maxEditorBtn) {
       this.maxEditorBtn.onclick = () => this.toggleMaximize("editor");
     }
-    if (this.maxResultBtn) {
-      this.maxResultBtn.onclick = () => this.toggleMaximize("result");
+    if (this.maxViewBtn) {
+      this.maxViewBtn.onclick = () => this.toggleMaximize("view");
+    }
+    if (this.maxCopilotBtn) {
+      this.maxCopilotBtn.onclick = () => this.toggleMaximize("copilot");
     }
 
-    // Resizer dragging
-    if (!this.resizerEl) return;
+    // Vertical Splitter: Main (Code+View) vs Copilot (drag left-right)
+    if (this.splitterMainX) {
+      let draggingX = false;
 
-    let dragging = false;
+      this.splitterMainX.addEventListener("mousedown", (e) => {
+        if (this.maximized) return;
+        e.preventDefault();
+        draggingX = true;
+        this.splitterMainX.classList.add("dragging");
+        document.body.classList.add("is-resizing");
+        document.body.style.cursor = "col-resize";
+      });
 
-    this.resizerEl.addEventListener("mousedown", (e) => {
-      if (this.maximized) return;
-      e.preventDefault();
-      dragging = true;
-      this.resizerEl.classList.add("dragging");
-      document.body.classList.add("is-resizing");
-      document.body.style.cursor = this.direction === "row" ? "col-resize" : "row-resize";
-    });
-
-    window.addEventListener("mousemove", (e) => {
-      if (!dragging) return;
-      const rect = this.workbenchEl.getBoundingClientRect();
-      if (this.direction === "row") {
+      window.addEventListener("mousemove", (e) => {
+        if (!draggingX) return;
+        const rect = this.workbenchEl.getBoundingClientRect();
         const offset = e.clientX - rect.left;
         const total = rect.width;
         let pct = (offset / total) * 100;
-        pct = Math.max(18, Math.min(82, pct));
-        this.ratio = pct;
-        this.editorPane.style.flex = `0 0 ${pct}%`;
-      } else {
+        pct = Math.max(25, Math.min(80, pct));
+        this.ratioMainX = pct;
+        if (this.mainColEl) this.mainColEl.style.flex = `0 0 ${pct}%`;
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (draggingX) {
+          draggingX = false;
+          this.splitterMainX.classList.remove("dragging");
+          document.body.classList.remove("is-resizing");
+          document.body.style.cursor = "";
+          localStorage.setItem("sysml_split_main_x", String(Math.round(this.ratioMainX)));
+          window.dispatchEvent(new Event("resize"));
+        }
+      });
+
+      this.splitterMainX.addEventListener("dblclick", () => {
+        this.ratioMainX = 62;
+        localStorage.setItem("sysml_split_main_x", "62");
+        this.apply();
+      });
+    }
+
+    // Horizontal Splitter: Editor vs View (drag up-down)
+    if (this.splitterLeftY) {
+      let draggingY = false;
+
+      this.splitterLeftY.addEventListener("mousedown", (e) => {
+        if (this.maximized) return;
+        e.preventDefault();
+        draggingY = true;
+        this.splitterLeftY.classList.add("dragging");
+        document.body.classList.add("is-resizing");
+        document.body.style.cursor = "row-resize";
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!draggingY || !this.mainColEl) return;
+        const rect = this.mainColEl.getBoundingClientRect();
         const offset = e.clientY - rect.top;
         const total = rect.height;
         let pct = (offset / total) * 100;
-        pct = Math.max(18, Math.min(82, pct));
-        this.ratio = pct;
-        this.editorPane.style.flex = `0 0 ${pct}%`;
-      }
-    });
+        pct = Math.max(15, Math.min(85, pct));
+        this.ratioLeftY = pct;
+        if (this.editorPane) this.editorPane.style.flex = `0 0 ${pct}%`;
+      });
 
-    window.addEventListener("mouseup", () => {
-      if (dragging) {
-        dragging = false;
-        this.resizerEl.classList.remove("dragging");
-        document.body.classList.remove("is-resizing");
-        document.body.style.cursor = "";
-        localStorage.setItem("sysml_layout_ratio", String(Math.round(this.ratio)));
-        window.dispatchEvent(new Event("resize"));
-      }
-    });
+      window.addEventListener("mouseup", () => {
+        if (draggingY) {
+          draggingY = false;
+          this.splitterLeftY.classList.remove("dragging");
+          document.body.classList.remove("is-resizing");
+          document.body.style.cursor = "";
+          localStorage.setItem("sysml_split_main_y", String(Math.round(this.ratioLeftY)));
+          window.dispatchEvent(new Event("resize"));
+        }
+      });
 
-    // Double click resizer to reset ratio
-    this.resizerEl.addEventListener("dblclick", () => {
-      this.ratio = 52;
-      localStorage.setItem("sysml_layout_ratio", "52");
-      this.apply();
-    });
+      this.splitterLeftY.addEventListener("dblclick", () => {
+        this.ratioLeftY = 50;
+        localStorage.setItem("sysml_split_main_y", "50");
+        this.apply();
+      });
+    }
   }
 }

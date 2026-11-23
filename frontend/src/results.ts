@@ -10,7 +10,7 @@ export const taskNames = {
   repair: "修复代码",
   validate: "验证代码",
   extract: "提取实体",
-  render: "生成结构图",
+  render: "生成视图",
 };
 export const phaseNames: Record<string, string> = {
   queued: "等待执行",
@@ -19,7 +19,7 @@ export const phaseNames: Record<string, string> = {
   generating: "正在生成代码",
   repairing: "正在修改与修复",
   validating: "正在验证 SysML",
-  rendering: "正在生成结构图",
+  rendering: "正在生成视图",
   recovering: "正在恢复任务",
   completed: "已完成",
   failed: "未完成",

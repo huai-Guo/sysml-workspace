@@ -490,7 +490,7 @@ async function refreshCapabilities() {
       rows.replaceChildren();
       for (const [name, label] of [
         ["validate", "语言验证 / 实体提取"],
-        ["render", "结构图"],
+        ["render", "视图"],
         ["rag", "知识检索"],
         ["generate", "付费模型"],
       ]) {
@@ -689,18 +689,31 @@ function notifyCopilotRunComplete(run: Run) {
   );
   body.append(header);
 
-  body.append(
-    node(
-      "p",
-      "模型代码已由 glm-5.3 生成并完成语义解析。你可以直接采纳到左侧编辑器，或在右侧查看对应的结构图。",
-    ),
-  );
+  const autoApply = (document.getElementById("auto-apply-code") as HTMLInputElement)?.checked ?? true;
+
+  if (autoApply && run.result?.sysml_source) {
+    void applySource(run.result.sysml_source, true);
+    notice("✨ 已自动应用最新模型代码并刷新视图！");
+    body.append(
+      node(
+        "p",
+        "模型代码已由 glm-5.3 生成，已自动同步至左侧代码编辑器并刷新视图。",
+      ),
+    );
+  } else {
+    body.append(
+      node(
+        "p",
+        "模型代码已由 glm-5.3 生成并完成语义解析。你可以点击下方按钮采纳到代码编辑器，或查看架构视图。",
+      ),
+    );
+  }
 
   if (run.result?.diagnostics?.length) {
     body.append(
       node(
         "p",
-        `⚠️ 伴随诊断提示：${run.result.diagnostics.length} 项（已在左侧行号及诊断面板标出）。`,
+        `⚠️ 伴随诊断提示：${run.result.diagnostics.length} 项（已在行号及诊断面板标出）。`,
         "copilot-diag-note",
       ),
     );
@@ -713,7 +726,7 @@ function notifyCopilotRunComplete(run: Run) {
     const actions = node("div", "", "copilot-code-actions");
 
     const applyBtn = action(
-      "✨ 采纳到编辑器",
+      "✨ 采纳到代码",
       () => {
         void applySource(code, true);
         notice("已将最新代码同步至编辑器！");
@@ -727,13 +740,14 @@ function notifyCopilotRunComplete(run: Run) {
     );
 
     const viewBtn = action(
-      "📐 查看对应结构图",
+      "📐 查看视图",
       () => {
         if (run.result) {
           results.show(run);
         }
         results.tab("diagram");
         results.setUpdateBadge("diagram", false);
+        layoutManager.focusView();
       },
       "btn-action-view",
     );
@@ -750,10 +764,6 @@ function notifyCopilotRunComplete(run: Run) {
 
     actions.append(applyBtn, viewBtn, copyBtn);
     body.append(actions);
-
-    if (!sourceEditor.value.trim()) {
-      void applySource(code, true);
-    }
   }
 
   msg.append(avatar, body);
@@ -797,7 +807,7 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
   }
   if (!capabilities?.capabilities.includes(task)) {
     notice(messages.model_not_configured);
-    return;
+    throw new Error(messages.model_not_configured);
   }
   // Capture exactly what the user chose to run; autosave may finish after more edits.
   const draft = structuredClone(buffer.value.draft);
@@ -808,12 +818,12 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
   if (["generate", "revise"].includes(task) && !draft.request.trim()) {
     notice("请先描述你的工程需求或修改要求。");
     if (!overrideTask) el("prompt").focus();
-    return;
+    throw new Error("请先描述你的工程需求或修改要求。");
   }
   if (task !== "generate" && !draft.sysml_source.trim()) {
     notice("请先编辑或导入 SysML 代码，也可以打开示例模型。");
     sourceEditor.view.focus();
-    return;
+    throw new Error("请先编辑或导入 SysML 代码，也可以打开示例模型。");
   }
   submitting = true;
   updateControls();
@@ -838,9 +848,7 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
     if (!authGate.accepts(epoch)) return;
     submission.accepted();
     notice();
-    if (["generate", "revise", "repair"].includes(task)) {
-      results.tab("copilot");
-    } else if (overrideTask === "render" || task === "render") {
+    if (overrideTask === "render" || task === "render" || ["generate", "revise", "repair"].includes(task)) {
       results.tab("diagram");
     } else if (task === "extract") {
       results.tab("entities");
@@ -1354,23 +1362,44 @@ function initCopilot() {
 
   async function handleSend(promptText: string) {
     const text = promptText.trim();
-    if (!text || submitting || !sessionId) return;
+    if (!text) return;
+    if (submitting) {
+      notice("上一任务正在执行中，请稍候…");
+      return;
+    }
+    if (!sessionId) {
+      if (sessions.length) {
+        await selectSession(sessions[0].id);
+      } else {
+        await createSession();
+      }
+    }
 
     appendCopilotMsg("user", text);
     input.value = "";
 
+    const isGenerateIntent =
+      !sourceEditor.value.trim() ||
+      /^(生成|创建|新建|设计|编写|构建|重写|写一个)/.test(text) ||
+      text.includes("重新生成") ||
+      text.includes("全套模型");
+
     let task: Task = "revise";
-    if (!sourceEditor.value.trim()) {
+    if (isGenerateIntent) {
       task = "generate";
     } else if (
       text.includes("修复") ||
       text.includes("自愈") ||
-      text.includes("报错")
+      text.includes("报错") ||
+      text.includes("诊断")
     ) {
       task = "repair";
     }
 
-    appendCopilotPending("正在思考并调用 glm-5.3 生成模型代码与结构...");
+    appendCopilotPending("正在思考并调用 glm-5.3 生成模型代码与视图...");
+
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = `<span>处理中…</span>`;
 
     try {
       if (buffer) {
@@ -1387,10 +1416,14 @@ function initCopilot() {
         ".copilot-msg.pending",
       );
       if (pending) {
+        pending.classList.remove("pending");
         pending.querySelector(".msg-body")!.textContent =
-          "执行遇到错误: " +
+          "❌ 执行遇到错误: " +
           (err instanceof Error ? err.message : String(err));
       }
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = `<span>发送指令</span> <span aria-hidden="true">→</span>`;
     }
   }
 
@@ -1414,9 +1447,28 @@ function initCopilot() {
     };
   }
 
+  const clearChatBtn = document.getElementById("clear-copilot-chat");
+  if (clearChatBtn) {
+    clearChatBtn.onclick = () => {
+      appendCopilotWelcome();
+      notice("已重置当前 AI 对话。");
+    };
+  }
+
   const activeFileItem = document.getElementById("active-file-item");
   if (activeFileItem) {
-    activeFileItem.onclick = () => sourceEditor.view.focus();
+    activeFileItem.onclick = () => {
+      layoutManager.focusEditor();
+      sourceEditor.view.focus();
+    };
+  }
+
+  const sidebarViewItem = document.getElementById("sidebar-view-item");
+  if (sidebarViewItem) {
+    sidebarViewItem.onclick = () => {
+      layoutManager.focusView();
+      results.tab("diagram");
+    };
   }
 }
 

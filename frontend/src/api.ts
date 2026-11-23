@@ -11,7 +11,7 @@ export const messages: Record<string, string> = {
   request_quota_exceeded: "已达到当前请求配额，请稍后重试。",
   session_quota_exceeded: "模型数量已达上限，请整理不再使用的模型。",
   model_not_configured:
-    "模型 API 尚未配置。你仍可编辑、验证、提取实体和生成结构图。",
+    "模型 API 尚未配置。你仍可编辑、验证、提取实体和生成视图。",
   knowledge_not_configured: "知识库尚未配置。",
   knowledge_unavailable: "知识服务暂时不可用，请稍后重试。",
   knowledge_quota_exceeded: "知识库容量已达上限，请整理已有资料。",
@@ -31,7 +31,7 @@ export const messages: Record<string, string> = {
   invalid: "代码未通过语言验证。请查看下方诊断并定位修改。",
   repair_exhausted: "自动修复后仍有诊断，请检查代码或调整需求。",
   tool_error: "语言验证器未能完成检查，请稍后重试。",
-  renderer_unavailable: "结构图暂时生成失败，已验证的代码和实体已保留。可将结果用于继续编辑，再单独生成结构图，无需重复调用模型。",
+  renderer_unavailable: "视图暂时生成失败，已验证的代码和实体已保留。可将结果用于继续编辑，再单独生成视图，无需重复调用模型。",
   timeout: "处理超时，请缩小输入后重试。",
   internal_error: "服务发生异常，请将请求编号提供给管理员。",
   session_not_found: "模型已被删除或当前账号无法访问。",
