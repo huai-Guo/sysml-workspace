@@ -1,17 +1,18 @@
+export type PanelKey = "editor" | "view" | "copilot";
+
 export class LayoutManager {
-  private ratioMainX = 62; // percentage for left main area (editor + view)
-  private ratioLeftY = 50; // percentage for editor height within left main area
+  private slots: PanelKey[] = ["editor", "view", "copilot"];
+  private ratioMainX = 62; // percentage for left main area
+  private ratioLeftY = 50; // percentage for slot 1 height within left main area
   private sidebarOpen = true;
-  private maximized: "editor" | "view" | "copilot" | null = null;
+  private maximized: PanelKey | null = null;
 
   private workbenchEl!: HTMLElement;
   private mainColEl!: HTMLElement;
-  private editorPane!: HTMLElement;
-  private viewPane!: HTMLElement;
-  private copilotPane!: HTMLElement;
+  private slotEls: HTMLElement[] = [];
+  private panels: Record<PanelKey, HTMLElement> = {} as any;
   private splitterMainX!: HTMLElement;
   private splitterLeftY!: HTMLElement;
-  private sidebarEl!: HTMLElement;
 
   private maxEditorBtn!: HTMLButtonElement | null;
   private maxViewBtn!: HTMLButtonElement | null;
@@ -20,18 +21,39 @@ export class LayoutManager {
   init() {
     this.workbenchEl = document.querySelector(".workbench") as HTMLElement;
     this.mainColEl = document.getElementById("workbench-main") as HTMLElement;
-    this.editorPane = document.getElementById("editor-region") as HTMLElement;
-    this.viewPane = document.getElementById("view-region") as HTMLElement;
-    this.copilotPane = document.getElementById("copilot-region") as HTMLElement;
+
+    this.slotEls = [
+      document.getElementById("slot-1") as HTMLElement,
+      document.getElementById("slot-2") as HTMLElement,
+      document.getElementById("slot-3") as HTMLElement,
+    ];
+
+    this.panels = {
+      editor: document.getElementById("editor-region") as HTMLElement,
+      view: document.getElementById("view-region") as HTMLElement,
+      copilot: document.getElementById("copilot-region") as HTMLElement,
+    };
+
     this.splitterMainX = document.getElementById("splitter-main-copilot") as HTMLElement;
     this.splitterLeftY = document.getElementById("splitter-editor-view") as HTMLElement;
-    this.sidebarEl = document.getElementById("sidebar") as HTMLElement;
 
     this.maxEditorBtn = document.getElementById("btn-maximize-editor") as HTMLButtonElement | null;
     this.maxViewBtn = document.getElementById("btn-maximize-view") as HTMLButtonElement | null;
     this.maxCopilotBtn = document.getElementById("btn-maximize-copilot") as HTMLButtonElement | null;
 
     // Load saved preferences
+    const savedSlots = localStorage.getItem("sysml_panel_slots");
+    if (savedSlots) {
+      try {
+        const parsed = JSON.parse(savedSlots);
+        if (Array.isArray(parsed) && parsed.length === 3 && ["editor", "view", "copilot"].every((k) => parsed.includes(k))) {
+          this.slots = parsed as PanelKey[];
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     const savedRatioX = localStorage.getItem("sysml_split_main_x");
     if (savedRatioX) {
       const num = parseFloat(savedRatioX);
@@ -47,8 +69,35 @@ export class LayoutManager {
       this.sidebarOpen = savedSidebar === "true";
     }
 
+    this.mountSlots();
     this.apply();
     this.bindEvents();
+    this.bindDragAndDrop();
+  }
+
+  mountSlots() {
+    this.slots.forEach((key, index) => {
+      const slotEl = this.slotEls[index];
+      const panelEl = this.panels[key];
+      if (slotEl && panelEl && panelEl.parentElement !== slotEl) {
+        slotEl.appendChild(panelEl);
+      }
+    });
+  }
+
+  swapPanels(keyA: PanelKey, keyB: PanelKey) {
+    if (keyA === keyB) return;
+    const idxA = this.slots.indexOf(keyA);
+    const idxB = this.slots.indexOf(keyB);
+    if (idxA === -1 || idxB === -1) return;
+
+    this.slots[idxA] = keyB;
+    this.slots[idxB] = keyA;
+
+    this.mountSlots();
+    localStorage.setItem("sysml_panel_slots", JSON.stringify(this.slots));
+    this.apply();
+    window.dispatchEvent(new Event("resize"));
   }
 
   apply() {
@@ -59,33 +108,31 @@ export class LayoutManager {
     this.workbenchEl.classList.toggle("maximized-view", this.maximized === "view");
     this.workbenchEl.classList.toggle("maximized-copilot", this.maximized === "copilot");
 
-    if (this.maximized === "copilot") {
-      if (this.mainColEl) this.mainColEl.style.display = "none";
-      if (this.copilotPane) {
-        this.copilotPane.style.display = "flex";
-        this.copilotPane.style.flex = "1 1 100%";
-      }
-      if (this.splitterMainX) this.splitterMainX.style.display = "none";
-    } else if (this.maximized === "editor" || this.maximized === "view") {
-      if (this.copilotPane) this.copilotPane.style.display = "none";
-      if (this.splitterMainX) this.splitterMainX.style.display = "none";
-      if (this.mainColEl) {
-        this.mainColEl.style.display = "flex";
-        this.mainColEl.style.flex = "1 1 100%";
-      }
-      if (this.maximized === "editor") {
-        if (this.editorPane) {
-          this.editorPane.style.display = "flex";
-          this.editorPane.style.flex = "1 1 100%";
+    if (this.maximized) {
+      const maxKey = this.maximized;
+      const maxSlotIdx = this.slots.indexOf(maxKey);
+
+      this.slotEls.forEach((slot, idx) => {
+        if (!slot) return;
+        if (idx === maxSlotIdx) {
+          slot.style.display = "flex";
+          slot.style.flex = "1 1 100%";
+        } else {
+          slot.style.display = "none";
         }
-        if (this.viewPane) this.viewPane.style.display = "none";
-        if (this.splitterLeftY) this.splitterLeftY.style.display = "none";
+      });
+
+      if (maxSlotIdx === 2) {
+        // Slot 3 (right side) maximized
+        if (this.mainColEl) this.mainColEl.style.display = "none";
+        if (this.splitterMainX) this.splitterMainX.style.display = "none";
       } else {
-        if (this.editorPane) this.editorPane.style.display = "none";
-        if (this.viewPane) {
-          this.viewPane.style.display = "flex";
-          this.viewPane.style.flex = "1 1 100%";
+        // Slot 1 or 2 (left side) maximized
+        if (this.mainColEl) {
+          this.mainColEl.style.display = "flex";
+          this.mainColEl.style.flex = "1 1 100%";
         }
+        if (this.splitterMainX) this.splitterMainX.style.display = "none";
         if (this.splitterLeftY) this.splitterLeftY.style.display = "none";
       }
     } else {
@@ -94,21 +141,21 @@ export class LayoutManager {
         this.mainColEl.style.display = "flex";
         this.mainColEl.style.flex = `0 0 ${this.ratioMainX}%`;
       }
-      if (this.copilotPane) {
-        this.copilotPane.style.display = "flex";
-        this.copilotPane.style.flex = `1 1 0`;
-      }
       if (this.splitterMainX) this.splitterMainX.style.display = "";
-
-      if (this.editorPane) {
-        this.editorPane.style.display = "flex";
-        this.editorPane.style.flex = `0 0 ${this.ratioLeftY}%`;
-      }
-      if (this.viewPane) {
-        this.viewPane.style.display = "flex";
-        this.viewPane.style.flex = "1 1 0";
-      }
       if (this.splitterLeftY) this.splitterLeftY.style.display = "";
+
+      if (this.slotEls[0]) {
+        this.slotEls[0].style.display = "flex";
+        this.slotEls[0].style.flex = `0 0 ${this.ratioLeftY}%`;
+      }
+      if (this.slotEls[1]) {
+        this.slotEls[1].style.display = "flex";
+        this.slotEls[1].style.flex = `1 1 0`;
+      }
+      if (this.slotEls[2]) {
+        this.slotEls[2].style.display = "flex";
+        this.slotEls[2].style.flex = `1 1 0`;
+      }
     }
 
     // Apply sidebar state
@@ -120,28 +167,31 @@ export class LayoutManager {
     // Update maximize buttons icon & title
     if (this.maxEditorBtn) {
       this.maxEditorBtn.innerHTML = this.maximized === "editor" ? "🗗" : "⤢";
-      this.maxEditorBtn.title = this.maximized === "editor" ? "还原窗格" : "最大化编辑器";
+      this.maxEditorBtn.title = this.maximized === "editor" ? "还原窗格" : "最大化此板块";
     }
     if (this.maxViewBtn) {
       this.maxViewBtn.innerHTML = this.maximized === "view" ? "🗗" : "⤢";
-      this.maxViewBtn.title = this.maximized === "view" ? "还原窗格" : "最大化视图";
+      this.maxViewBtn.title = this.maximized === "view" ? "还原窗格" : "最大化此板块";
     }
     if (this.maxCopilotBtn) {
       this.maxCopilotBtn.innerHTML = this.maximized === "copilot" ? "🗗" : "⤢";
-      this.maxCopilotBtn.title = this.maximized === "copilot" ? "还原窗格" : "最大化 AI 助手";
+      this.maxCopilotBtn.title = this.maximized === "copilot" ? "还原窗格" : "最大化此板块";
     }
 
     window.dispatchEvent(new Event("resize"));
   }
 
   resetLayout() {
+    this.slots = ["editor", "view", "copilot"];
     this.ratioMainX = 62;
     this.ratioLeftY = 50;
     this.maximized = null;
     this.sidebarOpen = true;
+    localStorage.setItem("sysml_panel_slots", JSON.stringify(this.slots));
     localStorage.setItem("sysml_split_main_x", "62");
     localStorage.setItem("sysml_split_main_y", "50");
     localStorage.setItem("sysml_sidebar_open", "true");
+    this.mountSlots();
     this.apply();
   }
 
@@ -151,7 +201,7 @@ export class LayoutManager {
     this.apply();
   }
 
-  toggleMaximize(target: "editor" | "view" | "copilot") {
+  toggleMaximize(target: PanelKey) {
     if (this.maximized === target) {
       this.maximized = null;
     } else {
@@ -161,7 +211,7 @@ export class LayoutManager {
   }
 
   focusEditor() {
-    if (this.maximized === "view" || this.maximized === "copilot") {
+    if (this.maximized && this.maximized !== "editor") {
       this.maximized = null;
       this.apply();
     }
@@ -170,7 +220,7 @@ export class LayoutManager {
   }
 
   focusView() {
-    if (this.maximized === "editor" || this.maximized === "copilot") {
+    if (this.maximized && this.maximized !== "view") {
       this.maximized = null;
       this.apply();
     }
@@ -202,7 +252,7 @@ export class LayoutManager {
       this.maxCopilotBtn.onclick = () => this.toggleMaximize("copilot");
     }
 
-    // Vertical Splitter: Main (Code+View) vs Copilot (drag left-right)
+    // Vertical Splitter: Main (left) vs Right Slot (drag left-right)
     if (this.splitterMainX) {
       let draggingX = false;
 
@@ -244,7 +294,7 @@ export class LayoutManager {
       });
     }
 
-    // Horizontal Splitter: Editor vs View (drag up-down)
+    // Horizontal Splitter: Slot 1 vs Slot 2 (drag up-down)
     if (this.splitterLeftY) {
       let draggingY = false;
 
@@ -265,7 +315,7 @@ export class LayoutManager {
         let pct = (offset / total) * 100;
         pct = Math.max(15, Math.min(85, pct));
         this.ratioLeftY = pct;
-        if (this.editorPane) this.editorPane.style.flex = `0 0 ${pct}%`;
+        if (this.slotEls[0]) this.slotEls[0].style.flex = `0 0 ${pct}%`;
       });
 
       window.addEventListener("mouseup", () => {
@@ -285,5 +335,98 @@ export class LayoutManager {
         this.apply();
       });
     }
+  }
+
+  private bindDragAndDrop() {
+    let draggedKey: PanelKey | null = null;
+
+    const panelKeys: PanelKey[] = ["editor", "view", "copilot"];
+
+    panelKeys.forEach((key) => {
+      const panel = this.panels[key];
+      if (!panel) return;
+
+      const header = panel.querySelector(".pane-heading") as HTMLElement;
+      if (!header) return;
+
+      // Make header draggable
+      header.setAttribute("draggable", "true");
+      header.classList.add("draggable-pane-heading");
+
+      header.addEventListener("dragstart", (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest("button, input, select, textarea, a, .result-tabs, .file-tab")) {
+          if (!target.closest(".pane-drag-handle")) {
+            e.preventDefault();
+            return;
+          }
+        }
+        draggedKey = key;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", key);
+          e.dataTransfer.effectAllowed = "move";
+        }
+        panel.classList.add("is-dragging");
+        this.workbenchEl.classList.add("has-drag-active");
+      });
+
+      header.addEventListener("dragend", () => {
+        draggedKey = null;
+        panel.classList.remove("is-dragging");
+        this.workbenchEl.classList.remove("has-drag-active");
+        panelKeys.forEach((k) => this.panels[k]?.classList.remove("drop-target"));
+      });
+
+      // Panel acts as drop target
+      panel.addEventListener("dragover", (e) => {
+        if (!draggedKey || draggedKey === key) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        panel.classList.add("drop-target");
+      });
+
+      panel.addEventListener("dragenter", (e) => {
+        if (!draggedKey || draggedKey === key) return;
+        e.preventDefault();
+        panel.classList.add("drop-target");
+      });
+
+      panel.addEventListener("dragleave", (e) => {
+        // Only remove if leaving the panel boundary
+        const rect = panel.getBoundingClientRect();
+        if (
+          e.clientX <= rect.left ||
+          e.clientX >= rect.right ||
+          e.clientY <= rect.top ||
+          e.clientY >= rect.bottom
+        ) {
+          panel.classList.remove("drop-target");
+        }
+      });
+
+      panel.addEventListener("drop", (e) => {
+        e.preventDefault();
+        panelKeys.forEach((k) => this.panels[k]?.classList.remove("drop-target"));
+        const sourceKey = (e.dataTransfer?.getData("text/plain") as PanelKey) || draggedKey;
+        if (sourceKey && sourceKey !== key) {
+          this.swapPanels(sourceKey, key);
+        }
+        draggedKey = null;
+        this.workbenchEl.classList.remove("has-drag-active");
+      });
+    });
+
+    // Also bind swap buttons if present
+    document.querySelectorAll<HTMLButtonElement>(".btn-swap-panel").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const fromKey = btn.dataset.panel as PanelKey;
+        // Cycle swap with next slot
+        const curIdx = this.slots.indexOf(fromKey);
+        const nextIdx = (curIdx + 1) % this.slots.length;
+        const targetKey = this.slots[nextIdx];
+        this.swapPanels(fromKey, targetKey);
+      };
+    });
   }
 }
