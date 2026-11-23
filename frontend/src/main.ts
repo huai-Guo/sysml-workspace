@@ -1023,20 +1023,27 @@ if (dropupLogout) {
   };
 }
 
+const handleCloseLoginForm = () => {
+  const tokenInput = optEl<HTMLInputElement>("token");
+  if (tokenInput) tokenInput.value = "";
+  const loginErr = optEl("login-error");
+  if (loginErr) loginErr.textContent = "";
+  const notice = optEl("login-exit-notice");
+  const loginForm = optEl("login-form");
+  if (notice && loginForm) {
+    loginForm.hidden = true;
+    notice.hidden = false;
+  }
+};
+
+const loginCloseBtn = optEl("login-close-btn");
+if (loginCloseBtn) {
+  loginCloseBtn.onclick = handleCloseLoginForm;
+}
+
 const loginExitBtn = optEl("login-exit");
 if (loginExitBtn) {
-  loginExitBtn.onclick = () => {
-    const tokenInput = optEl<HTMLInputElement>("token");
-    if (tokenInput) tokenInput.value = "";
-    const loginErr = optEl("login-error");
-    if (loginErr) loginErr.textContent = "";
-    const notice = optEl("login-exit-notice");
-    const loginForm = optEl("login-form");
-    if (notice && loginForm) {
-      loginForm.hidden = true;
-      notice.hidden = false;
-    }
-  };
+  loginExitBtn.onclick = handleCloseLoginForm;
 }
 
 const loginReopenBtn = optEl("login-reopen");
@@ -1050,7 +1057,7 @@ if (loginReopenBtn) {
       optEl<HTMLInputElement>("token")?.focus();
     }
   };
-};
+}
 el("new-session").onclick = () => void createSession().catch(fail);
 el("session-search").oninput = renderSessions;
 el("save-draft").onclick = () => void save().catch(fail);
