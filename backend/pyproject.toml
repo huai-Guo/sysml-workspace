@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 sysml-workspace = "sysml_workspace.cli:main"
+sysml-workspace-web = "sysml_workspace.web.server:main"
 
 [project.optional-dependencies]
 dev = [

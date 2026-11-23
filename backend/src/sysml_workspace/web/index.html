@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f9fa">
+    <title>SysML Agent</title>
+    <link rel="stylesheet" href="/app.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="SysML Agent 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="m16 3 12 6.5v13L16 29 4 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.7" />
+              <path d="m4.5 9.8 11.5 6.4 11.5-6.4M16 16.2v12" stroke="currentColor" stroke-width="1.7" />
+            </svg>
+          </span>
+          <strong>SysML Agent</strong>
+          <span class="brand-divider"></span>
+          <span class="brand-subtitle">需求建模</span>
+        </a>
+        <div class="runtime-status" aria-label="本地运行状态">
+          <span id="model-status" class="status-chip checking"><i></i><span>模型检查中</span></span>
+          <span id="validator-status" class="status-chip checking"><i></i><span>验证器检查中</span></span>
+        </div>
+      </header>
+
+      <main class="chat-layout">
+        <section id="conversation" class="conversation" aria-label="与 SysML Agent 对话" aria-live="polite">
+          <div id="welcome" class="welcome">
+            <div class="welcome-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" fill="none"><path d="m16 3 12 6.5v13L16 29 4 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.5"/><path d="m4.5 9.8 11.5 6.4 11.5-6.4M16 16.2v12" stroke="currentColor" stroke-width="1.5"/></svg>
+            </div>
+            <h1>你好，我是 SysML Agent</h1>
+            <p>告诉我你想描述什么系统，我会生成 SysML v2，并用 Pilot 验证；发现问题时会尝试自动修复。</p>
+            <div class="suggestions" aria-label="需求示例">
+              <button type="button" class="suggestion">建模一辆电动汽车，包含电池、电机和车轮，并描述它们之间的供电与驱动关系。</button>
+              <button type="button" class="suggestion">描述一个温控系统：温度传感器读取环境温度，控制器根据设定值控制加热器。</button>
+              <button type="button" class="suggestion">建立一个简单的无人机系统，包括机架、飞控、电池和四个旋翼。</button>
+            </div>
+          </div>
+          <div id="messages" class="messages"></div>
+          <div id="end-anchor" class="end-anchor"></div>
+        </section>
+
+        <div class="composer-area">
+          <div id="setup-notice" class="setup-notice" hidden></div>
+          <form id="composer" class="composer">
+            <label class="sr-only" for="request">输入系统需求</label>
+            <textarea id="request" rows="1" maxlength="20000" placeholder="描述你想建模的系统…" autocomplete="off"></textarea>
+            <div class="composer-footer">
+              <div class="composer-hint"><span class="local-lock" aria-hidden="true">⌑</span>本机工作流 · 输入需求后按 Enter 发送</div>
+              <div class="composer-tools"><span id="char-count">0 / 20,000</span><button id="send" class="send-button" type="submit" aria-label="发送需求" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15V4M5.5 8.5 10 4l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+            </div>
+          </form>
+          <p class="composer-caption">最多自动修复 3 轮 · 模型密钥只从本机环境读取 · 请检查生成结果是否符合工程意图</p>
+        </div>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
