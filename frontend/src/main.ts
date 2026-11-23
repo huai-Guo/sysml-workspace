@@ -117,8 +117,12 @@ function updateSave() {
   el("draft-indicator").hidden = !dirty;
   el("conflict").hidden = !buffer?.conflict;
   results.stale(sourceEditor.value);
-  el("source-count").textContent =
-    `${sourceEditor.value.split("\n").length} 行 · UTF-8`;
+  const lineCount = sourceEditor.value.split("\n").length;
+  el("source-count").textContent = `${lineCount} 行 · UTF-8`;
+  const fileMeta = document.getElementById("sidebar-file-meta");
+  if (fileMeta) {
+    fileMeta.textContent = `${lineCount} 行 · UTF-8`;
+  }
   el("memory-label").textContent = buffer?.value.memory_enabled
     ? "会话记忆已开启"
     : "会话记忆已关闭";
@@ -217,6 +221,7 @@ function install(session: Session) {
   updateSave();
   updateControls();
   renderSessions();
+  void loadCopilotChat(session.id);
 }
 function renderSessions() {
   const filter = el<HTMLInputElement>("session-search").value.toLowerCase();
@@ -227,20 +232,32 @@ function renderSessions() {
     s.title.toLowerCase().includes(filter),
   )) {
     const isCurrent = session.id === sessionId;
-    const button = node("div", "", `session-item ${isCurrent ? "active" : ""}`);
+    const button = node(
+      "div",
+      "",
+      `session-thread ${isCurrent ? "active" : ""}`,
+    );
     button.setAttribute("role", "button");
     button.setAttribute("tabindex", "0");
     button.title = `${session.title} (双击重命名)`;
     button.setAttribute("aria-current", isCurrent ? "page" : "false");
 
-    const labelSpan = node("span", session.title);
-    button.append(labelSpan);
+    const iconSpan = node("span", "💬", "thread-icon");
+    const infoDiv = node("div", "", "thread-info");
+    const labelSpan = node("strong", session.title, "thread-title");
+    const metaSpan = node(
+      "small",
+      isCurrent ? "当前活动会话" : "建模会话",
+      "thread-meta",
+    );
+    infoDiv.append(labelSpan, metaSpan);
+    button.append(iconSpan, infoDiv);
 
     const startInlineRename = () => {
       const input = document.createElement("input");
       input.className = "session-rename-input";
       input.value = session.title;
-      labelSpan.replaceWith(input);
+      infoDiv.replaceWith(input);
       input.focus();
       input.select();
       let committed = false;
@@ -311,7 +328,7 @@ function renderSessions() {
     list.append(
       node(
         "p",
-        filter ? "没有匹配的模型" : "还没有模型，创建一个开始建模。",
+        filter ? "没有匹配的会话" : "还没有会话，点击上方新建工程会话。",
         "session-empty",
       ),
     );
@@ -595,11 +612,21 @@ async function poll(ticket = runGate.current) {
       );
       await loadHistory();
       if (!runGate.accepts(ticket)) return;
-      if (run.status === "failed") results.tab("diagnostics");
-      else if (run.task === "extract") results.tab("entities");
-      else if (run.task === "render" || run.result?.diagram) results.tab("diagram");
-      else if (["generate", "revise", "repair"].includes(run.task)) {
+      if (run.status === "failed") {
+        if (["generate", "revise", "repair"].includes(run.task)) {
+          notifyCopilotRunFailed(run);
+        } else {
+          results.tab("diagnostics");
+        }
+      } else if (["generate", "revise", "repair"].includes(run.task)) {
         notifyCopilotRunComplete(run);
+        if (run.result?.diagram) {
+          results.setUpdateBadge("diagram", true);
+        }
+      } else if (run.task === "render" || run.result?.diagram) {
+        results.tab("diagram");
+      } else if (run.task === "extract") {
+        results.tab("entities");
       }
       el("announcement").textContent =
         `${taskNames[run.task]}${run.status === "succeeded" ? "已完成" : "已结束"}`;
@@ -630,33 +657,101 @@ async function poll(ticket = runGate.current) {
 function notifyCopilotRunComplete(run: Run) {
   const chat = el("copilot-chat");
   if (!chat) return;
+
+  const pending = chat.querySelector(".copilot-msg.pending");
+  if (pending) pending.remove();
+
   const msg = node("div", "", "copilot-msg assistant");
   const avatar = node("div", "🤖", "msg-avatar");
   const body = node("div", "", "msg-body");
 
-  const p = node("p", `✨ 模型任务【${taskNames[run.task] || run.task}】已成功完成！`);
-  body.append(p);
+  const header = node("div", "", "copilot-card-header");
+  header.append(
+    node("strong", `✨ 建模任务【${taskNames[run.task] || run.task}】已完成`),
+  );
+  body.append(header);
+
+  body.append(
+    node(
+      "p",
+      "模型代码已由 glm-5.3 生成并完成语义解析。你可以直接采纳到左侧编辑器，或在右侧查看对应的结构图。",
+    ),
+  );
 
   if (run.result?.diagnostics?.length) {
-    const diagNote = node("p", `⚠️ 伴随诊断提示：${run.result.diagnostics.length} 项。可在“诊断”标签页查看详情。`, "copilot-diag-note");
-    body.append(diagNote);
+    body.append(
+      node(
+        "p",
+        `⚠️ 伴随诊断提示：${run.result.diagnostics.length} 项（已在左侧行号及诊断面板标出）。`,
+        "copilot-diag-note",
+      ),
+    );
   }
 
   if (run.result?.sysml_source) {
     const code = run.result.sysml_source;
+    body.append(node("pre", code, "copilot-code-preview"));
+
     const actions = node("div", "", "copilot-code-actions");
-    const applyBtn = action("【将此代码应用到编辑器】", () => {
-      void applySource(code, true);
-      notice("已应用最新生成的代码！");
-      results.tab("diagram");
-    }, "button primary compact");
-    actions.append(applyBtn);
+
+    const applyBtn = action(
+      "✨ 采纳到编辑器",
+      () => {
+        void applySource(code, true);
+        notice("已将最新代码同步至编辑器！");
+      },
+      "btn-action-apply",
+    );
+
+    const viewBtn = action(
+      "📐 查看对应结构图",
+      () => {
+        results.tab("diagram");
+        results.setUpdateBadge("diagram", false);
+      },
+      "btn-action-view",
+    );
+
+    const copyBtn = action(
+      "📋 复制代码",
+      () => {
+        navigator.clipboard.writeText(code).then(() => {
+          notice("代码已复制到剪贴板");
+        });
+      },
+      "btn-action-copy",
+    );
+
+    actions.append(applyBtn, viewBtn, copyBtn);
     body.append(actions);
 
     if (!sourceEditor.value.trim()) {
       void applySource(code, true);
     }
   }
+
+  msg.append(avatar, body);
+  chat.append(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function notifyCopilotRunFailed(run: Run) {
+  const chat = el("copilot-chat");
+  if (!chat) return;
+
+  const pending = chat.querySelector(".copilot-msg.pending");
+  if (pending) pending.remove();
+
+  const msg = node("div", "", "copilot-msg assistant error");
+  const avatar = node("div", "🤖", "msg-avatar");
+  const body = node("div", "", "msg-body");
+
+  body.append(
+    node(
+      "p",
+      `❌ 任务【${taskNames[run.task] || run.task}】执行未完全成功：${run.error || "请检查模型连接与输入需求。"}`,
+    ),
+  );
 
   msg.append(avatar, body);
   chat.append(msg);
@@ -710,15 +805,15 @@ async function submitRun(overrideTask?: Task, overrideRequest?: string) {
     if (!authGate.accepts(epoch)) return;
     submission.accepted();
     notice();
-    results.tab(
-      overrideTask === "render" || task === "render" || payload.render
-        ? "diagram"
-        : ["generate", "revise", "repair"].includes(task)
-          ? "copilot"
-          : task === "extract"
-            ? "entities"
-            : "diagnostics",
-    );
+    if (["generate", "revise", "repair"].includes(task)) {
+      results.tab("copilot");
+    } else if (overrideTask === "render" || task === "render") {
+      results.tab("diagram");
+    } else if (task === "extract") {
+      results.tab("entities");
+    } else {
+      results.tab("diagnostics");
+    }
     await viewRun(job.id);
   } catch (error) {
     fail(error);
@@ -1132,38 +1227,108 @@ if (editTitleBtn) {
 }
 const layoutManager = new LayoutManager();
 
-function initCopilot() {
+function appendCopilotMsg(role: "user" | "assistant", content: string) {
   const chat = el("copilot-chat");
+  if (!chat) return null;
+  const msg = node("div", "", `copilot-msg ${role}`);
+  const avatar = node("div", role === "user" ? "👤" : "🤖", "msg-avatar");
+  const body = node("div", "", "msg-body");
+  const p = node("p", content);
+  body.append(p);
+  msg.append(avatar, body);
+  chat.append(msg);
+  chat.scrollTop = chat.scrollHeight;
+  return msg;
+}
+
+function appendCopilotPending(text: string) {
+  const chat = el("copilot-chat");
+  if (!chat) return;
+  const msg = node("div", "", "copilot-msg assistant pending");
+  const avatar = node("div", "🤖", "msg-avatar");
+  const body = node("div", "", "msg-body");
+  const p = node("p", text);
+  body.append(p);
+  msg.append(avatar, body);
+  chat.append(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function appendCopilotWelcome() {
+  const chat = el("copilot-chat");
+  if (!chat) return;
+  chat.replaceChildren();
+  const msg = node("div", "", "copilot-msg assistant");
+  const avatar = node("div", "🤖", "msg-avatar");
+  const body = node("div", "", "msg-body");
+  const p1 = node("p", "你好！我是 SysML AI 伴随建模助手 (glm-5.3)。");
+  const p2 = node(
+    "p",
+    "你可以直接向我描述你希望构建的系统结构、对当前模型进行增量扩充，或让我自愈修复代码中的语法报错。",
+  );
+  body.append(p1, p2);
+  msg.append(avatar, body);
+  chat.append(msg);
+}
+
+async function loadCopilotChat(sessId: string) {
+  const chat = el("copilot-chat");
+  if (!chat) return;
+  chat.replaceChildren();
+
+  try {
+    const page = await api.json<Page<Run>>(
+      `/v1/sessions/${sessId}/runs?limit=30`,
+    );
+    const modelRuns = page.items
+      .filter(
+        (r) =>
+          ["generate", "revise", "repair"].includes(r.task) && r.request,
+      )
+      .reverse();
+
+    if (modelRuns.length > 0) {
+      for (const r of modelRuns) {
+        if (r.request) {
+          appendCopilotMsg("user", r.request);
+        }
+        if (r.status === "succeeded" && r.result?.sysml_source) {
+          notifyCopilotRunComplete(r);
+        } else if (r.status === "failed") {
+          notifyCopilotRunFailed(r);
+        }
+      }
+    } else {
+      appendCopilotWelcome();
+    }
+  } catch {
+    appendCopilotWelcome();
+  }
+}
+
+function initCopilot() {
   const input = el<HTMLTextAreaElement>("copilot-input");
   const sendBtn = el<HTMLButtonElement>("copilot-send");
-
-  function appendMsg(role: "user" | "assistant", content: string) {
-    const msg = node("div", "", `copilot-msg ${role}`);
-    const avatar = node("div", role === "user" ? "👤" : "🤖", "msg-avatar");
-    const body = node("div", "", "msg-body");
-    const p = node("p", content);
-    body.append(p);
-    msg.append(avatar, body);
-    chat.append(msg);
-    chat.scrollTop = chat.scrollHeight;
-    return msg;
-  }
 
   async function handleSend(promptText: string) {
     const text = promptText.trim();
     if (!text || submitting || !sessionId) return;
 
-    appendMsg("user", text);
+    appendCopilotMsg("user", text);
     input.value = "";
 
     let task: Task = "revise";
     if (!sourceEditor.value.trim()) {
       task = "generate";
-    } else if (text.includes("修复") || text.includes("自愈") || text.includes("报错")) {
+    } else if (
+      text.includes("修复") ||
+      text.includes("自愈") ||
+      text.includes("报错")
+    ) {
       task = "repair";
     }
 
-    const pendingMsg = appendMsg("assistant", "正在思考并调用 glm-5.3 生成模型代码...");
+    appendCopilotPending("正在思考并调用 glm-5.3 生成模型代码与结构...");
 
     try {
       if (buffer) {
@@ -1176,9 +1341,13 @@ function initCopilot() {
       }
       await submitRun(task, text);
     } catch (err) {
-      const msgBody = pendingMsg.querySelector(".msg-body");
-      if (msgBody) {
-        msgBody.textContent = "执行遇到错误: " + (err instanceof Error ? err.message : String(err));
+      const pending = el("copilot-chat")?.querySelector(
+        ".copilot-msg.pending",
+      );
+      if (pending) {
+        pending.querySelector(".msg-body")!.textContent =
+          "执行遇到错误: " +
+          (err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -1194,11 +1363,18 @@ function initCopilot() {
     }
   };
 
-  for (const pill of document.querySelectorAll<HTMLButtonElement>(".copilot-pill")) {
+  for (const pill of document.querySelectorAll<HTMLButtonElement>(
+    ".copilot-pill",
+  )) {
     pill.onclick = () => {
       const p = pill.dataset.prompt;
       if (p) void handleSend(p);
     };
+  }
+
+  const activeFileItem = document.getElementById("active-file-item");
+  if (activeFileItem) {
+    activeFileItem.onclick = () => sourceEditor.view.focus();
   }
 }
 

@@ -8,14 +8,60 @@
   <div class="login-form"><form id="login-form"><span class="small-label">欢迎回来</span><h2>进入你的工作空间</h2><p class="muted">使用管理员提供的访问令牌登录。</p><label for="token">访问令牌</label><input id="token" type="password" autocomplete="off" placeholder="粘贴访问令牌" required><button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button><p id="login-error" role="alert"></p><p class="fineprint">登录最长保持 8 小时。令牌不会保存在浏览器本地存储中；退出登录会立即结束本次会话。</p><button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button></form></div>
 </section>
 <div id="workspace" class="app-shell" hidden>
-  <aside id="sidebar" class="sidebar" aria-label="工作空间导航">
-    <div class="wordmark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>SysML<span>Workbench</span></div>
-    <div class="workspace-label"><span class="workspace-icon">S</span><div><strong>我的工作空间</strong><small id="tenant-name">PRIVATE WORKSPACE</small></div></div>
-    <button id="new-session" class="button primary wide"><span aria-hidden="true">＋</span> 新建模型</button>
-    <label for="session-search" class="sr-only">搜索模型</label><input id="session-search" class="search" type="search" placeholder="搜索模型…" autocomplete="off">
-    <div class="section-label"><span>模型</span><span id="session-count">0</span></div><nav id="sessions" aria-label="模型列表"></nav>
-    <div class="sidebar-tools"><button id="open-knowledge" class="nav-action">▤ <span>个人知识库</span></button><button id="open-status" class="nav-action"><i class="status-dot" id="service-dot"></i><span id="service-summary">正在连接服务</span></button></div>
-    <div class="account"><span id="avatar" class="avatar">U</span><div><strong id="identity"></strong><small>个人工作空间</small></div><button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button></div>
+  <aside id="sidebar" class="sidebar" aria-label="工程与会话导航">
+    <div class="sidebar-header">
+      <div class="wordmark">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>
+        SysML<span>Workbench</span>
+      </div>
+      <button id="sidebar-close-btn" class="icon-button btn-toggle-sidebar" title="折叠侧边栏" aria-label="折叠侧边栏">◧</button>
+    </div>
+
+    <button id="new-session" class="btn-new-thread">
+      <span aria-hidden="true">＋</span> 新建工程会话
+    </button>
+
+    <div class="search-box">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+      <input id="session-search" class="search" type="search" placeholder="搜索模型与会话…" autocomplete="off">
+    </div>
+
+    <!-- Codex-style Section 1: Project Files -->
+    <div class="sidebar-section">
+      <div class="section-label">
+        <span>📁 工程文件</span>
+        <span class="section-tag">SysML v2</span>
+      </div>
+      <div class="project-files-list">
+        <div class="file-item active" id="active-file-item" title="当前主模型代码文件 (点击定位到编辑器)">
+          <span class="file-icon">S</span>
+          <div class="file-info">
+            <strong class="file-title">model.sysml</strong>
+            <small id="sidebar-file-meta" class="file-meta">主模型文件</small>
+          </div>
+          <span class="file-badge">ACTIVE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Codex-style Section 2: Copilot Sessions -->
+    <div class="sidebar-section flex-1">
+      <div class="section-label">
+        <span>💬 建模会话 (Sessions)</span>
+        <span id="session-count" class="badge-count">0</span>
+      </div>
+      <nav id="sessions" aria-label="模型会话列表" class="sessions-nav"></nav>
+    </div>
+
+    <div class="sidebar-tools">
+      <button id="open-knowledge" class="nav-action">▤ <span>个人知识库</span></button>
+      <button id="open-status" class="nav-action"><i class="status-dot" id="service-dot"></i><span id="service-summary">服务状态</span></button>
+    </div>
+    <div class="account">
+      <span id="avatar" class="avatar">U</span>
+      <div class="account-info"><strong id="identity"></strong><small>个人工作空间</small></div>
+      <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button>
+    </div>
   </aside>
   <div class="work-area">
     <header class="app-header">

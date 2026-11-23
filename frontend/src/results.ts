@@ -133,7 +133,20 @@ export class Results {
       if (this.fit) this.resize();
     }).observe(viewport);
   }
+  get currentTab(): string {
+    const active = document.querySelector<HTMLButtonElement>(
+      "[data-tab][aria-selected='true']",
+    );
+    return active?.dataset.tab || "diagram";
+  }
+  setUpdateBadge(tabName: string, hasUpdate: boolean) {
+    const btn = document.getElementById(`tab-button-${tabName}`);
+    if (btn) {
+      btn.classList.toggle("has-update", hasUpdate);
+    }
+  }
   tab(name: string, focus = false) {
+    this.setUpdateBadge(name, false);
     for (const b of document.querySelectorAll<HTMLButtonElement>(
       "[data-tab]",
     )) {
