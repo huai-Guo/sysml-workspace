@@ -279,14 +279,28 @@ function renderSessions() {
       };
     };
 
+    let clickTimer: ReturnType<typeof setTimeout> | undefined;
+
     button.onclick = (e) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return;
-      void selectSession(session.id).catch(fail);
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = undefined;
+        return;
+      }
+      clickTimer = setTimeout(() => {
+        clickTimer = undefined;
+        void selectSession(session.id).catch(fail);
+      }, 250);
     };
 
     button.ondblclick = (e) => {
       e.stopPropagation();
       e.preventDefault();
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = undefined;
+      }
       startInlineRename();
     };
 

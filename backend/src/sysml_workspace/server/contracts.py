@@ -34,7 +34,7 @@ class DraftInput(BaseModel):
 
 class SessionUpdate(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    revision: int = Field(ge=0)
+    revision: int | None = Field(default=None, ge=0)
     title: str | None = Field(default=None, min_length=1, max_length=200)
     memory_enabled: bool | None = None
     draft: DraftInput | None = None

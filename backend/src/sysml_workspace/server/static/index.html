@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csp-nonce" content="__CSP_NONCE__"><title>SysML Studio · 建模工作台</title><link rel="stylesheet" href="/assets/workbench.css"><script type="module" src="/assets/workbench.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csp-nonce" content="__CSP_NONCE__"><title>SysML Workbench · 建模工作台</title><link rel="stylesheet" href="/assets/workbench.css"><script type="module" src="/assets/workbench.js"></script></head>
 <body>
 <a href="#editor-region" class="skip-link">跳到模型编辑器</a>
 <section id="login" class="login-screen">
-  <div class="login-story"><div class="wordmark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>sysml<span>studio</span></div><p class="eyebrow">A WORKSPACE FOR SYSTEMS THINKING</p><h1>让系统的每一个连接，<br>都有据可循。</h1><p class="login-intro">描述工程需求，编辑 SysML v2，<br>在同一工作台中验证代码、查看结构和追溯实体。</p><div class="login-steps"><span>01 <b>建模</b></span><i></i><span>02 <b>验证</b></span><i></i><span>03 <b>洞察</b></span></div><p class="login-note">你的模型、草稿与知识资料按账户隔离。</p></div>
+  <div class="login-story"><div class="wordmark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>SysML<span>Workbench</span></div><p class="eyebrow">A WORKSPACE FOR SYSTEMS THINKING</p><h1>让系统的每一个连接，<br>都有据可循。</h1><p class="login-intro">描述工程需求，编辑 SysML v2，<br>在同一工作台中验证代码、查看结构和追溯实体。</p><div class="login-steps"><span>01 <b>建模</b></span><i></i><span>02 <b>验证</b></span><i></i><span>03 <b>洞察</b></span></div><p class="login-note">你的模型、草稿与知识资料按账户隔离。</p></div>
   <div class="login-form"><form id="login-form"><span class="small-label">欢迎回来</span><h2>进入你的工作空间</h2><p class="muted">使用管理员提供的访问令牌登录。</p><label for="token">访问令牌</label><input id="token" type="password" autocomplete="off" placeholder="粘贴访问令牌" required><button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button><p id="login-error" role="alert"></p><p class="fineprint">登录最长保持 8 小时。令牌不会保存在浏览器本地存储中；退出登录会立即结束本次会话。</p><button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button></form></div>
 </section>
 <div id="workspace" class="app-shell" hidden>
   <aside id="sidebar" class="sidebar" aria-label="工作空间导航">
-    <div class="wordmark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>sysml<span>studio</span></div>
+    <div class="wordmark"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 8h18v16H7zM7 16h18M16 8v16"/></svg>SysML<span>Workbench</span></div>
     <div class="workspace-label"><span class="workspace-icon">S</span><div><strong>我的工作空间</strong><small id="tenant-name">PRIVATE WORKSPACE</small></div></div>
     <button id="new-session" class="button primary wide"><span aria-hidden="true">＋</span> 新建模型</button>
     <label for="session-search" class="sr-only">搜索模型</label><input id="session-search" class="search" type="search" placeholder="搜索模型…" autocomplete="off">
@@ -26,7 +26,7 @@
         <div class="pane-heading">
           <div><span class="small-label">MODEL</span><h2>模型编辑器</h2></div>
           <div class="pane-actions">
-            <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">✨ 格式化</button>
+            <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">✨ 排版格式化</button>
             <button id="render-run" class="button primary compact" title="验证代码并更新结构图 (Ctrl+Enter)">▶ 运行渲染</button>
             <button id="import-source" class="button ghost compact">导入文件</button>
             <button id="download-draft" class="button ghost compact">导出草稿</button>
@@ -80,9 +80,9 @@
           <button role="tab" id="tab-button-diagram" data-tab="diagram" aria-selected="true" aria-controls="tab-diagram">📐 结构图 (View)</button>
           <button role="tab" id="tab-button-copilot" data-tab="copilot" aria-selected="false" aria-controls="tab-copilot" tabindex="-1">🤖 AI 助手 (glm-5.3)</button>
           <button role="tab" id="tab-button-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1">⚠️ 诊断 <span id="diagnostic-count">0</span></button>
-          <button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1" style="display:none;">运行代码</button>
-          <button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1" style="display:none;">实体 <span id="entity-count">0</span></button>
-          <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" style="display:none;">运行记录</button>
+          <button role="tab" id="tab-button-code" data-tab="code" aria-selected="false" aria-controls="tab-code" tabindex="-1" hidden>运行代码</button>
+          <button role="tab" id="tab-button-entities" data-tab="entities" aria-selected="false" aria-controls="tab-entities" tabindex="-1" hidden>实体 <span id="entity-count">0</span></button>
+          <button role="tab" id="tab-button-history" data-tab="history" aria-selected="false" aria-controls="tab-history" tabindex="-1" hidden>运行记录</button>
         </div>
         <div id="run-progress" class="run-progress" hidden>
           <span class="spinner" aria-hidden="true"></span>

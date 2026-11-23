@@ -1651,3 +1651,34 @@ dialog > input {
 .btn-apply-code:hover {
   background: #115e59;
 }
+.session-rename-input {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1.5px solid var(--accent);
+  border-radius: 4px;
+  background: white;
+  color: var(--ink);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(22, 124, 104, 0.15);
+}
+.copilot-code-preview {
+  margin: 8px 0;
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font: 11px/1.5 "Cascadia Code", Consolas, monospace;
+  max-height: 200px;
+  overflow: auto;
+}
+.copilot-code-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.copilot-diag-note {
+  color: #b45309;
+  font-size: 12px;
+  margin-top: 4px;
+}
