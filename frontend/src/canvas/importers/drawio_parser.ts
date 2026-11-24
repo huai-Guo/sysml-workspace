@@ -12,47 +12,102 @@ export class DrawioParser {
     const viewTypeMatch = xmlContent.match(/viewType="([^"]+)"/) || xmlContent.match(/viewType='([^']+)'/);
     const viewType = viewTypeMatch ? viewTypeMatch[1] : undefined;
 
-    const updatedPositions = new Map<string, { x: number; y: number; width?: number; height?: number }>();
+    interface RawGeom {
+      id: string;
+      parentId?: string;
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+    }
 
-    // 1. Extract geometries from UserObject elements
-    const userObjRegex = /<UserObject\s+[^>]*?id="([^"]+)"[^>]*>[\s\S]*?<mxGeometry\s+([^>]+?)\/?>/g;
-    let uMatch: RegExpExecArray | null;
-    while ((uMatch = userObjRegex.exec(xmlContent)) !== null) {
-      const id = uMatch[1];
-      const geomAttr = uMatch[2];
-      const xMatch = geomAttr.match(/x="([^"]+)"/);
-      const yMatch = geomAttr.match(/y="([^"]+)"/);
-      const wMatch = geomAttr.match(/width="([^"]+)"/);
-      const hMatch = geomAttr.match(/height="([^"]+)"/);
-      if (id && xMatch && yMatch) {
-        updatedPositions.set(id, {
-          x: parseFloat(xMatch[1]),
-          y: parseFloat(yMatch[1]),
-          width: wMatch ? parseFloat(wMatch[1]) : undefined,
-          height: hMatch ? parseFloat(hMatch[1]) : undefined,
-        });
+    const rawMap = new Map<string, RawGeom>();
+
+    // 1. Extract geometries from UserObject elements (including parent from nested mxCell)
+    const userObjBlockRegex = /<UserObject\s+[^>]*?id="([^"]+)"[^>]*>([\s\S]*?)<\/UserObject>/g;
+    let uBlockMatch: RegExpExecArray | null;
+    while ((uBlockMatch = userObjBlockRegex.exec(xmlContent)) !== null) {
+      const id = uBlockMatch[1];
+      const inner = uBlockMatch[2];
+      const parentMatch = inner.match(/parent="([^"]+)"/);
+      const geomMatch = inner.match(/<mxGeometry\s+([^>]+?)\/?>/);
+      if (geomMatch) {
+        const geomAttr = geomMatch[1];
+        const xMatch = geomAttr.match(/x="([^"]+)"/);
+        const yMatch = geomAttr.match(/y="([^"]+)"/);
+        const wMatch = geomAttr.match(/width="([^"]+)"/);
+        const hMatch = geomAttr.match(/height="([^"]+)"/);
+        if (xMatch && yMatch) {
+          rawMap.set(id, {
+            id,
+            parentId: parentMatch ? parentMatch[1] : undefined,
+            x: parseFloat(xMatch[1]),
+            y: parseFloat(yMatch[1]),
+            width: wMatch ? parseFloat(wMatch[1]) : undefined,
+            height: hMatch ? parseFloat(hMatch[1]) : undefined,
+          });
+        }
       }
     }
 
     // 2. Extract geometries from standard mxCell vertex elements
-    const cellGeomRegex = /<mxCell\s+[^>]*?id="([^"]+)"[^>]*?vertex="1"[^>]*>[\s\S]*?<mxGeometry\s+([^>]+?)\/?>/g;
+    const cellGeomRegex = /<mxCell\s+([^>]+?)\/?>([\s\S]*?<\/mxCell>)?/g;
     let cMatch: RegExpExecArray | null;
     while ((cMatch = cellGeomRegex.exec(xmlContent)) !== null) {
-      const id = cMatch[1];
-      if (updatedPositions.has(id)) continue;
-      const geomAttr = cMatch[2];
-      const xMatch = geomAttr.match(/x="([^"]+)"/);
-      const yMatch = geomAttr.match(/y="([^"]+)"/);
-      const wMatch = geomAttr.match(/width="([^"]+)"/);
-      const hMatch = geomAttr.match(/height="([^"]+)"/);
-      if (id && xMatch && yMatch) {
-        updatedPositions.set(id, {
-          x: parseFloat(xMatch[1]),
-          y: parseFloat(yMatch[1]),
-          width: wMatch ? parseFloat(wMatch[1]) : undefined,
-          height: hMatch ? parseFloat(hMatch[1]) : undefined,
-        });
+      const attrs = cMatch[1];
+      const inner = cMatch[2] || "";
+      if (!attrs.includes('vertex="1"')) continue;
+      const idMatch = attrs.match(/id="([^"]+)"/);
+      const parentMatch = attrs.match(/parent="([^"]+)"/);
+      if (!idMatch || rawMap.has(idMatch[1])) continue;
+      const id = idMatch[1];
+      const geomMatch = (attrs + " " + inner).match(/<mxGeometry\s+([^>]+?)\/?>/);
+      if (geomMatch) {
+        const geomAttr = geomMatch[1];
+        const xMatch = geomAttr.match(/x="([^"]+)"/);
+        const yMatch = geomAttr.match(/y="([^"]+)"/);
+        const wMatch = geomAttr.match(/width="([^"]+)"/);
+        const hMatch = geomAttr.match(/height="([^"]+)"/);
+        if (xMatch && yMatch) {
+          rawMap.set(id, {
+            id,
+            parentId: parentMatch ? parentMatch[1] : undefined,
+            x: parseFloat(xMatch[1]),
+            y: parseFloat(yMatch[1]),
+            width: wMatch ? parseFloat(wMatch[1]) : undefined,
+            height: hMatch ? parseFloat(hMatch[1]) : undefined,
+          });
+        }
       }
+    }
+
+    // 3. Resolve relative coordinates of nested cells back to absolute coordinates
+    const resolveAbsolute = (id: string, visited = new Set<string>()): { x: number; y: number } => {
+      const item = rawMap.get(id);
+      if (!item) return { x: 0, y: 0 };
+      if (
+        !item.parentId ||
+        item.parentId === "0" ||
+        item.parentId === "1" ||
+        !rawMap.has(item.parentId) ||
+        visited.has(id)
+      ) {
+        return { x: item.x, y: item.y };
+      }
+      visited.add(id);
+      const parentAbs = resolveAbsolute(item.parentId, visited);
+      return { x: parentAbs.x + item.x, y: parentAbs.y + item.y };
+    };
+
+    const updatedPositions = new Map<string, { x: number; y: number; width?: number; height?: number }>();
+    for (const [id, raw] of rawMap.entries()) {
+      const absPos = resolveAbsolute(id);
+      updatedPositions.set(id, {
+        x: absPos.x,
+        y: absPos.y,
+        width: raw.width,
+        height: raw.height,
+      });
     }
 
     if (metaMatch) {

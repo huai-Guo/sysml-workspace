@@ -8,6 +8,7 @@ export class CanvasRulers {
   private cursorIndicatorH: HTMLDivElement;
   private cursorIndicatorV: HTMLDivElement;
   private disposed = false;
+  private rafId: number | null = null;
 
   constructor(container: HTMLElement, graph: Graph) {
     this.container = container;
@@ -80,9 +81,9 @@ export class CanvasRulers {
     this.cursorIndicatorV.style.pointerEvents = "none";
     container.appendChild(this.cursorIndicatorV);
 
-    // Hook graph events
-    this.graph.on("scale", () => this.draw());
-    this.graph.on("translate", () => this.draw());
+    // Hook graph events with requestAnimationFrame throttling
+    this.graph.on("scale", () => this.requestDraw());
+    this.graph.on("translate", () => this.requestDraw());
     this.graph.on("resize", () => this.resizeAndDraw());
 
     // Cursor tracking
@@ -246,12 +247,25 @@ export class CanvasRulers {
     ctxV.restore();
   }
 
+  public requestDraw(): void {
+    if (this.disposed) return;
+    if (this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.draw();
+    });
+  }
+
   public dispose(): void {
     this.destroy();
   }
 
   public destroy(): void {
     this.disposed = true;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
     this.rulerHCanvas.remove();
     this.rulerVCanvas.remove();
     this.cursorIndicatorH.remove();

@@ -144,6 +144,13 @@ export class Results {
       };
     }
 
+    const cadCmdBtn = optEl<HTMLButtonElement>("btn-cad-command");
+    if (cadCmdBtn) {
+      cadCmdBtn.onclick = () => {
+        this.canvasEngine?.commandBar?.toggle();
+      };
+    }
+
     // --- Milestone R3: Import & Export UI Handlers ---
     const importBtn = optEl<HTMLButtonElement>("btn-import-diagram");
     const importFileInput = optEl<HTMLInputElement>("diagram-file-input");
@@ -345,10 +352,17 @@ export class Results {
     this.imageUrl = undefined;
     el<HTMLImageElement>("diagram-image").removeAttribute("src");
     el("diagram-image").hidden = true;
-    if (!keepLoading) {
+
+    // Retain canvas if it already has a rendered diagram to prevent flickering (Milestone R4.2)
+    const hasPreviousCanvas = Boolean(this.canvasEngine?.hasRenderedView());
+    if (!keepLoading && !hasPreviousCanvas) {
       el("diagram-empty").hidden = false;
     }
-    el("diagram-viewport").classList.remove("has-diagram");
+    if (!hasPreviousCanvas) {
+      el("diagram-viewport").classList.remove("has-diagram");
+      this.showStaleBanner(false);
+    }
+
     for (const id of ["run-progress", "result-error", "stale-result"])
       el(id).hidden = true;
     for (const id of ["entities", "diagnostics", "timeline", "run-facts"]) {
@@ -593,6 +607,7 @@ export class Results {
       this.setLoading(false);
     }
     if (result.diagram) {
+      this.showStaleBanner(false);
       this.setLoading(false);
       const diagEmpty = optEl("diagram-empty");
       if (diagEmpty) diagEmpty.hidden = true;
@@ -647,6 +662,20 @@ export class Results {
             : "";
         }
       }
+    } else if ((!result.valid || job.status === "failed") && this.canvasEngine?.hasRenderedView()) {
+      // Milestone R4.2: Retain previous valid snapshot on compile error & show stale overlay banner
+      this.setLoading(false);
+      const canvasContainer = optEl("sysml-canvas-container");
+      if (canvasContainer) canvasContainer.hidden = false;
+      const diagViewport = optEl("diagram-viewport");
+      if (diagViewport) diagViewport.classList.add("has-diagram");
+      const diagEmpty = optEl("diagram-empty");
+      if (diagEmpty) diagEmpty.hidden = true;
+      for (const id of ["zoom-in", "zoom-out", "zoom-fit", "reset-layout"]) {
+        const zBtn = optEl<HTMLButtonElement>(id);
+        if (zBtn) zBtn.disabled = false;
+      }
+      this.showStaleBanner(true);
     }
   }
   private entities() {
@@ -722,5 +751,12 @@ export class Results {
     this.fit = false;
     this.width = Math.max(150, Math.min(6000, this.width * factor));
     this.resize();
+  }
+  public showStaleBanner(show: boolean) {
+    const banner = optEl("canvas-stale-banner");
+    if (banner) {
+      banner.hidden = !show;
+      banner.style.display = show ? "flex" : "none";
+    }
   }
 }

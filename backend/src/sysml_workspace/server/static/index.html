@@ -291,6 +291,7 @@
                     <button id="zoom-out" class="icon-button" aria-label="缩小视图">−</button>
                     <button id="zoom-fit" class="button ghost compact">适应画布</button>
                     <button id="zoom-in" class="icon-button" aria-label="放大视图">＋</button>
+                    <button id="btn-cad-command" class="button ghost compact" title="CAD 命令行唤醒栏 (快捷键: /)">⌨ 命令行</button>
                     <button id="btn-import-diagram" class="button secondary compact" title="导入文件 (.sysml / .drawio / .json / .svg)">📥 导入</button>
                     <input id="diagram-file-input" type="file" accept=".sysml,.kerml,.drawio,.xml,.json,.svg" hidden>
                     <div class="dropdown-wrap" id="export-dropdown-wrap" style="position: relative; display: inline-block;">
@@ -310,6 +311,10 @@
                   </div>
                 </div>
                 <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="交互式架构视图画布">
+                  <!-- Stale View Retention Overlay -->
+                  <div id="canvas-stale-banner" class="canvas-stale-banner" hidden>
+                    <span class="stale-dot">●</span> <span>当前代码存在语法错误 · 正在显示最近一次有效快照</span>
+                  </div>
                   <!-- Dynamic Progressive Loading Skeleton -->
                   <div id="diagram-loading-skeleton" class="diagram-skeleton" hidden>
                     <div class="skeleton-preview-box">

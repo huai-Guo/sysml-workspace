@@ -25,6 +25,7 @@ import { SysMLPalette, type InsertElementEvent } from "./palette";
 import { SemanticEditor } from "./semantic_editor";
 import { DxfExporter, DrawioExporter, JsonExporter, SvgExporter, ImageExporter, type DxfExportOptions } from "./exporters";
 import { CanvasImporter, type ImportResult } from "./importers";
+import { CadCommandBar } from "./command_bar";
 
 export interface CanvasEngineOptions {
   theme?: CanvasThemeId;
@@ -68,6 +69,7 @@ export class SysMLCanvasEngine {
   public miniMapPlugin?: MiniMap;
   public selectionPlugin?: Selection;
   public transformPlugin?: Transform;
+  public commandBar?: CadCommandBar;
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
     this.container = container;
@@ -288,6 +290,26 @@ export class SysMLCanvasEngine {
       });
     } catch (e) {
       console.warn("Palette init warning:", e);
+    }
+
+    // 4. Initialize CAD Command Bar
+    try {
+      this.commandBar = new CadCommandBar(container, {
+        zoomFit: () => this.zoomFit(),
+        toggleOrtho: () => this.toggleOrtho(),
+        toggleGrid: () => this.toggleGrid(),
+        toggleSnap: () => this.toggleSnap(),
+        toggleOsnap: () => this.toggleOsnap(),
+        toggleSheet: () => this.toggleSheet(),
+        alignSelected: (type) => this.alignSelected(type),
+        resetLayout: () => this.resetLayout(),
+        switchView: (v) => this.switchView(v),
+        setTheme: (t) => this.setTheme(t),
+        exportFormat: (fmt) => this.triggerExport(fmt),
+        showNotice: (msg) => this.showNoticeCallback?.(msg),
+      });
+    } catch (e) {
+      console.warn("Command bar init warning:", e);
     }
 
     this.applyThemeStyles();
@@ -911,10 +933,18 @@ export class SysMLCanvasEngine {
 
   public exportDxf(options?: DxfExportOptions): string {
     if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
+    const edgeVertices = new Map<string, { x: number; y: number }[]>();
+    for (const edge of this.graph.getEdges()) {
+      const vertices = edge.getVertices() || [];
+      if (vertices.length > 0) {
+        edgeVertices.set(edge.id, vertices);
+      }
+    }
     return DxfExporter.export(this.currentViewIR, {
       includeFrame: options?.includeFrame ?? this.sheetVisible,
       scale: options?.scale,
       nodePositions: this.getCurrentPositions(),
+      edgeVertices,
     });
   }
 
@@ -936,15 +966,17 @@ export class SysMLCanvasEngine {
     });
   }
 
-  public exportSvg(): string {
+  public exportSvg(options?: { includeFrame?: boolean }): string {
     if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
     const svgEl = this.graph.container.querySelector("svg");
     if (!svgEl) throw new Error("未找到画布对应的 SVG 矢量渲染图元");
     const src = this.getSourceCallback?.() || "";
     return SvgExporter.export(svgEl, this.currentViewIR, {
+      includeFrame: options?.includeFrame ?? this.sheetVisible,
       sysmlSource: src,
       theme: this.themeId,
       sidecarPositions: this.sidecar.toRecord(),
+      nodePositions: this.getCurrentPositions(),
     });
   }
 
@@ -953,9 +985,10 @@ export class SysMLCanvasEngine {
     bg: "white" | "transparent" | "blueprint" = "blueprint",
   ): Promise<Blob> {
     const svgStr = this.exportSvg();
-    const area = this.graph.getContentArea();
-    const w = Math.max(800, area.width + 120);
-    const h = Math.max(600, area.height + 120);
+    const widthMatch = svgStr.match(/width="([^"]+)"/);
+    const heightMatch = svgStr.match(/height="([^"]+)"/);
+    const w = widthMatch ? parseFloat(widthMatch[1]) : 1000;
+    const h = heightMatch ? parseFloat(heightMatch[1]) : 700;
     return ImageExporter.exportPngBlob(svgStr, w, h, { scale, background: bg });
   }
 
@@ -973,11 +1006,12 @@ export class SysMLCanvasEngine {
       this.showNoticeCallback?.(`已成功恢复工作台工程包: ${file.name}`);
     } else if (result.kind === "drawio") {
       if (result.result.hasMetadata) {
+        const targetViewType = (result.result.viewType as ViewType) || this.currentViewIR?.viewType || "general";
         for (const [id, pos] of result.result.updatedPositions.entries()) {
           this.sidecar.set(
             id,
             { x: pos.x, y: pos.y, width: pos.width || 180, height: pos.height || 60, userMoved: true },
-            this.currentViewIR?.viewType,
+            targetViewType,
           );
         }
         this.applySourceCallback?.(result.result.sysmlSource, true);
@@ -992,11 +1026,81 @@ export class SysMLCanvasEngine {
     return result;
   }
 
+  // --- CAD Command Bar Action Delegators ---
+
+  public toggleOrtho(): boolean {
+    this.statusBar?.toggleMode("ortho");
+    return this.orthoEnabled;
+  }
+
+  public toggleGrid(): boolean {
+    this.statusBar?.toggleMode("grid");
+    return this.statusBar ? this.statusBar.getState().grid : true;
+  }
+
+  public toggleSnap(): boolean {
+    this.statusBar?.toggleMode("snap");
+    return this.statusBar ? this.statusBar.getState().snap : false;
+  }
+
+  public toggleOsnap(): boolean {
+    this.statusBar?.toggleMode("osnap");
+    return this.statusBar ? this.statusBar.getState().osnap : true;
+  }
+
+  public toggleSheet(): boolean {
+    this.statusBar?.toggleMode("sheet");
+    return this.sheetVisible;
+  }
+
+  public alignSelected(type: "left" | "right" | "top" | "bottom" | "centerH" | "centerV"): boolean {
+    if (!this.layersPanel) return false;
+    const count = this.layersPanel.getSelectedNodes().length;
+    if (count < 2) return false;
+    this.layersPanel.alignSelected(type);
+    return true;
+  }
+
+  public hasRenderedView(): boolean {
+    return Boolean(this.currentViewIR && this.graph.getNodes().length > 0);
+  }
+
+  public async triggerExport(format: "dxf" | "drawio" | "png" | "svg" | "json"): Promise<void> {
+    const downloadBlob = (blob: Blob, filename: string) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    if (format === "dxf") {
+      const dxf = this.exportDxf();
+      downloadBlob(new Blob([dxf], { type: "application/dxf" }), "diagram.dxf");
+    } else if (format === "drawio") {
+      const drawio = this.exportDrawio();
+      downloadBlob(new Blob([drawio], { type: "application/vnd.jgraph.mxfile" }), "diagram.drawio");
+    } else if (format === "json") {
+      const json = this.exportWorkbenchJson();
+      downloadBlob(new Blob([json], { type: "application/json" }), "project.sysmlwb.json");
+    } else if (format === "svg") {
+      const svg = this.exportSvg();
+      downloadBlob(new Blob([svg], { type: "image/svg+xml" }), "diagram.svg");
+    } else if (format === "png") {
+      const blob = await this.exportPngBlob(2);
+      downloadBlob(blob, "diagram-2x.png");
+    }
+  }
+
   public destroy(): void {
     window.removeEventListener("keydown", this.onKeyDownHandler);
     window.removeEventListener("keyup", this.onKeyUpHandler);
     this.container.removeEventListener("pointermove", this.onPointerMoveHandler);
 
+    this.commandBar?.dispose();
     this.rulers?.dispose();
     this.statusBar?.dispose();
     this.boxSelection?.dispose();

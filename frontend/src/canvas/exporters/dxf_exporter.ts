@@ -4,6 +4,7 @@ export interface DxfExportOptions {
   includeFrame?: boolean;
   scale?: number;
   nodePositions?: Map<string, { x: number; y: number; width: number; height: number }>;
+  edgeVertices?: Map<string, { x: number; y: number }[]>;
 }
 
 export class DxfExporter {
@@ -11,6 +12,7 @@ export class DxfExporter {
     const scale = options.scale || 1.0;
     const includeFrame = options.includeFrame ?? true;
     const positions = options.nodePositions;
+    const edgeVertices = options.edgeVertices;
 
     let handleId = 0x30;
     const nextHandle = () => (handleId++).toString(16).toUpperCase();
@@ -29,14 +31,30 @@ export class DxfExporter {
     // 1. HEADER SECTION
     emit("0", "SECTION", "2", "HEADER");
     emit("9", "$ACADVER", "1", "AC1015"); // AutoCAD 2000
+    emit("9", "$HANDSEED", "5", "FFFF");
     emit("9", "$INSUNITS", "70", "4"); // Millimeters
     emit("0", "ENDSEC");
 
-    // 2. TABLES SECTION
+    // 2. CLASSES SECTION
+    emit("0", "SECTION", "2", "CLASSES");
+    emit("0", "ENDSEC");
+
+    // 3. TABLES SECTION
     emit("0", "SECTION", "2", "TABLES");
 
-    // Layer Table
-    emit("0", "TABLE", "2", "LAYER", "5", nextHandle(), "70", "7");
+    // VPORT Table
+    emit("0", "TABLE", "2", "VPORT", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "1");
+    emit("0", "VPORT", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbViewportTableRecord", "2", "*ACTIVE", "70", "0");
+    emit("10", "0.0", "20", "0.0", "11", "1.0", "21", "1.0", "12", "0.0", "22", "0.0", "40", "1000.0", "41", "1.5");
+    emit("0", "ENDTAB");
+
+    // LTYPE Table
+    emit("0", "TABLE", "2", "LTYPE", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "1");
+    emit("0", "LTYPE", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbLinetypeTableRecord", "2", "CONTINUOUS", "70", "0", "3", "Solid line", "72", "65", "73", "0", "40", "0.0");
+    emit("0", "ENDTAB");
+
+    // LAYER Table
+    emit("0", "TABLE", "2", "LAYER", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "7");
 
     const layers: { name: string; color: number }[] = [
       { name: "0", color: 7 }, // White
@@ -53,21 +71,43 @@ export class DxfExporter {
       emit("2", lyr.name, "70", "0", "62", lyr.color, "6", "CONTINUOUS");
     }
     emit("0", "ENDTAB");
+
+    // STYLE Table
+    emit("0", "TABLE", "2", "STYLE", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "1");
+    emit("0", "STYLE", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbTextStyleTableRecord", "2", "STANDARD", "70", "0", "40", "0.0", "41", "1.0", "50", "0.0", "71", "0", "42", "2.5", "3", "txt", "4", "");
+    emit("0", "ENDTAB");
+
+    // APPID Table
+    emit("0", "TABLE", "2", "APPID", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "1");
+    emit("0", "APPID", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbRegAppTableRecord", "2", "ACAD", "70", "0");
+    emit("0", "ENDTAB");
+
+    // BLOCK_RECORD Table
+    emit("0", "TABLE", "2", "BLOCK_RECORD", "5", nextHandle(), "100", "AcDbSymbolTable", "70", "2");
+    emit("0", "BLOCK_RECORD", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbBlockTableRecord", "2", "*MODEL_SPACE");
+    emit("0", "BLOCK_RECORD", "5", nextHandle(), "100", "AcDbSymbolTableRecord", "100", "AcDbBlockTableRecord", "2", "*PAPER_SPACE");
+    emit("0", "ENDTAB");
+
     emit("0", "ENDSEC");
 
-    // 3. BLOCKS SECTION
+    // 4. BLOCKS SECTION
     emit("0", "SECTION", "2", "BLOCKS");
+    emit("0", "BLOCK", "5", nextHandle(), "100", "AcDbEntity", "8", "0", "100", "AcDbBlockBegin", "2", "*MODEL_SPACE", "70", "0", "10", "0.0", "20", "0.0", "30", "0.0", "3", "*MODEL_SPACE", "1", "");
+    emit("0", "ENDBLK", "5", nextHandle(), "100", "AcDbEntity", "8", "0", "100", "AcDbBlockEnd");
+    emit("0", "BLOCK", "5", nextHandle(), "100", "AcDbEntity", "8", "0", "100", "AcDbBlockBegin", "2", "*PAPER_SPACE", "70", "0", "10", "0.0", "20", "0.0", "30", "0.0", "3", "*PAPER_SPACE", "1", "");
+    emit("0", "ENDBLK", "5", nextHandle(), "100", "AcDbEntity", "8", "0", "100", "AcDbBlockEnd");
     emit("0", "ENDSEC");
 
-    // 4. ENTITIES SECTION
+    // 5. ENTITIES SECTION
     emit("0", "SECTION", "2", "ENTITIES");
 
     // Helper: Polyline rectangle
     const emitBox = (x: number, y: number, w: number, h: number, layer: string) => {
       const [x1, y1] = toCAD(x, y);
       const [x2, y2] = toCAD(x + w, y + h);
+      const lyr = layer.toUpperCase();
 
-      emit("0", "LWPOLYLINE", "5", nextHandle(), "100", "AcDbEntity", "8", layer);
+      emit("0", "LWPOLYLINE", "5", nextHandle(), "100", "AcDbEntity", "8", lyr);
       emit("100", "AcDbPolyline", "90", "4", "70", "1"); // closed
       emit("10", x1, "20", y1);
       emit("10", x2, "20", y1);
@@ -79,7 +119,8 @@ export class DxfExporter {
     const emitLine = (x1: number, y1: number, x2: number, y2: number, layer: string) => {
       const [p1x, p1y] = toCAD(x1, y1);
       const [p2x, p2y] = toCAD(x2, y2);
-      emit("0", "LINE", "5", nextHandle(), "100", "AcDbEntity", "8", layer);
+      const lyr = layer.toUpperCase();
+      emit("0", "LINE", "5", nextHandle(), "100", "AcDbEntity", "8", lyr);
       emit("100", "AcDbLine", "10", p1x, "20", p1y, "30", "0.0", "11", p2x, "21", p2y, "31", "0.0");
     };
 
@@ -94,7 +135,8 @@ export class DxfExporter {
     ) => {
       const [px, py] = toCAD(x, y);
       const clean = text.replace(/[\r\n]+/g, " ");
-      emit("0", "TEXT", "5", nextHandle(), "100", "AcDbEntity", "8", layer);
+      const lyr = layer.toUpperCase();
+      emit("0", "TEXT", "5", nextHandle(), "100", "AcDbEntity", "8", lyr);
       emit("100", "AcDbText", "10", px, "20", py, "30", "0.0", "40", Math.max(8, height * scale));
       emit("1", clean);
       if (align === "center") {
@@ -102,7 +144,7 @@ export class DxfExporter {
       }
     };
 
-    // 4.1 Render Nodes
+    // 5.1 Render Nodes
     let minGraphX = Infinity;
     let minGraphY = Infinity;
     let maxGraphX = -Infinity;
@@ -121,17 +163,20 @@ export class DxfExporter {
       maxGraphX = Math.max(maxGraphX, pos.x + pos.width);
       maxGraphY = Math.max(maxGraphY, pos.y + pos.height);
 
-      const layer = node.layer || "L2_STRUCTURE";
+      const layer = (node.layer || "L2_STRUCTURE").toUpperCase();
 
       // Node boundary
       emitBox(pos.x, pos.y, pos.width, pos.height, layer);
 
-      // Header divider line (at 28px)
+      // Header divider line (at 26px)
       emitLine(pos.x, pos.y + 26, pos.x + pos.width, pos.y + 26, layer);
 
-      // Stereotype and label text
-      const stText = `«${node.stereotype || node.kind}»`;
-      emitText(stText, pos.x + 8, pos.y + 10, 8, layer);
+      // Stereotype and label text without duplicate guillemets
+      const rawSt = (node.stereotype || node.kind || "").replace(/^[«<]+|[»>]+$/g, "");
+      const stText = rawSt ? `«${rawSt}»` : "";
+      if (stText) {
+        emitText(stText, pos.x + 8, pos.y + 10, 8, layer);
+      }
       emitText(node.name, pos.x + 8, pos.y + 22, 11, layer);
 
       // Compartments text
@@ -170,7 +215,7 @@ export class DxfExporter {
       }
     }
 
-    // 4.2 Render Edges (Orthogonal Polylines)
+    // 5.2 Render Edges (Orthogonal Polylines using canvas vertices if available)
     for (const edge of viewIR.edges || []) {
       const srcNodePos = positions?.get(edge.sourceId) || { x: 60, y: 60, width: 180, height: 80 };
       const tgtNodePos = positions?.get(edge.targetId) || { x: 300, y: 60, width: 180, height: 80 };
@@ -179,29 +224,40 @@ export class DxfExporter {
       const sy = srcNodePos.y + srcNodePos.height / 2;
       const tx = tgtNodePos.x;
       const ty = tgtNodePos.y + tgtNodePos.height / 2;
-      const midX = (sx + tx) / 2;
 
-      const layer = edge.layer || "L4_CONNECTIONS";
+      const layer = (edge.layer || "L4_CONNECTIONS").toUpperCase();
+      const vertices = edgeVertices?.get(edge.id);
 
-      // 3-segment orthogonal line
+      const pts: [number, number][] = [];
+      pts.push(toCAD(sx, sy));
+
+      if (vertices && vertices.length > 0) {
+        for (const v of vertices) {
+          pts.push(toCAD(v.x, v.y));
+        }
+      } else {
+        const midX = (sx + tx) / 2;
+        pts.push(toCAD(midX, sy));
+        pts.push(toCAD(midX, ty));
+      }
+      pts.push(toCAD(tx, ty));
+
       emit("0", "LWPOLYLINE", "5", nextHandle(), "100", "AcDbEntity", "8", layer);
-      emit("100", "AcDbPolyline", "90", "4", "70", "0"); // open polyline
-      const [p1x, p1y] = toCAD(sx, sy);
-      const [p2x, p2y] = toCAD(midX, sy);
-      const [p3x, p3y] = toCAD(midX, ty);
-      const [p4x, p4y] = toCAD(tx, ty);
-      emit("10", p1x, "20", p1y);
-      emit("10", p2x, "20", p2y);
-      emit("10", p3x, "20", p3y);
-      emit("10", p4x, "20", p4y);
+      emit("100", "AcDbPolyline", "90", pts.length, "70", "0"); // open polyline
+      for (const [px, py] of pts) {
+        emit("10", px, "20", py);
+      }
 
       // Edge label
       if (edge.label) {
-        emitText(edge.label, midX + 4, (sy + ty) / 2, 8, layer);
+        const midPoint = pts[Math.floor(pts.length / 2)];
+        emit("0", "TEXT", "5", nextHandle(), "100", "AcDbEntity", "8", layer);
+        emit("100", "AcDbText", "10", midPoint[0] + 4, "20", midPoint[1] + 4, "30", "0.0", "40", Math.max(8, 8 * scale));
+        emit("1", edge.label.replace(/[\r\n]+/g, " "));
       }
     }
 
-    // 4.3 Render ISO Sheet Frame & Title Block (if requested)
+    // 5.3 Render ISO Sheet Frame & Title Block (if requested)
     if (includeFrame) {
       if (!isFinite(minGraphX)) {
         minGraphX = 50;
@@ -252,6 +308,12 @@ export class DxfExporter {
     }
 
     emit("0", "ENDSEC");
+
+    // 6. OBJECTS SECTION
+    emit("0", "SECTION", "2", "OBJECTS");
+    emit("0", "DICTIONARY", "5", nextHandle(), "100", "AcDbDictionary", "281", "1");
+    emit("0", "ENDSEC");
+
     emit("0", "EOF");
 
     return lines.join("\n") + "\n";

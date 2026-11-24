@@ -49,13 +49,23 @@ export class DrawioExporter {
         height: 80,
       };
 
-      const parentCellId = node.parentId && viewIR.nodes.some((n) => n.id === node.parentId) ? node.parentId : "1";
+      const hasParent = Boolean(node.parentId && viewIR.nodes.some((n) => n.id === node.parentId));
+      const parentCellId = hasParent ? node.parentId! : "1";
       const style = DrawioExporter.buildNodeStyle(node);
       const label = DrawioExporter.buildNodeLabel(node);
 
+      // For nested children, compute coordinates relative to parent cell
+      let cellX = pos.x;
+      let cellY = pos.y;
+      if (hasParent && positions?.has(node.parentId!)) {
+        const parentPos = positions.get(node.parentId!)!;
+        cellX = pos.x - parentPos.x;
+        cellY = pos.y - parentPos.y;
+      }
+
       push(`        <UserObject id="${node.id}" label="${escapeXml(label)}" qualifiedName="${escapeXml(node.qualifiedName || node.name)}" kind="${node.kind}">`);
-      push(`          <mxCell id="${node.id}" style="${escapeXml(style)}" vertex="1" parent="${parentCellId}">`);
-      push(`            <mxGeometry x="${pos.x}" y="${pos.y}" width="${pos.width}" height="${pos.height}" as="geometry" />`);
+      push(`          <mxCell style="${escapeXml(style)}" vertex="1" parent="${parentCellId}">`);
+      push(`            <mxGeometry x="${cellX}" y="${cellY}" width="${pos.width}" height="${pos.height}" as="geometry" />`);
       push(`          </mxCell>`);
       push(`        </UserObject>`);
 
@@ -139,15 +149,16 @@ export class DrawioExporter {
   }
 
   private static buildNodeLabel(node: SysMLViewNode): string {
-    const st = `&lt;i&gt;&amp;laquo;${node.stereotype || node.kind}&amp;raquo;&lt;/i&gt;&lt;br/&gt;`;
-    const name = `&lt;b&gt;${node.name}&lt;/b&gt;`;
+    const rawSt = (node.stereotype || node.kind || "").replace(/^[«<]+|[»>]+$/g, "");
+    const st = rawSt ? `<i>&laquo;${rawSt}&raquo;</i><br/>` : "";
+    const name = `<b>${node.name}</b>`;
 
     let comps = "";
     if (node.compartments && node.compartments.length > 0) {
-      comps = "&lt;hr/&gt;";
+      comps = "<hr/>";
       for (const comp of node.compartments) {
         for (const item of comp.items.slice(0, 3)) {
-          comps += `&lt;div style=&quot;text-align:left;font-size:10px;&quot;&gt;${item.text}&lt;/div&gt;`;
+          comps += `<div style="text-align:left;font-size:10px;">${item.text}</div>`;
         }
       }
     }
