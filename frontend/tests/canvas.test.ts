@@ -6,25 +6,39 @@ import { runElkLayout } from "../src/canvas/elk_layout";
 import { buildNodeAttrs, buildPortItems } from "../src/canvas/shapes";
 import type { SysMLViewIR, SysMLViewNode } from "../src/canvas/types";
 
-test("LayoutSidecar stores and recalls manual node positions", () => {
+test("LayoutSidecar stores and recalls manual node positions with viewType isolation", () => {
   const sidecar = new LayoutSidecar("test-session-1");
   sidecar.clear();
 
-  assert.equal(sidecar.has("VehicleModel::Vehicle"), false);
+  assert.equal(sidecar.has("VehicleModel::Vehicle", "general"), false);
 
+  // Set general view position (standard card)
   sidecar.set("VehicleModel::Vehicle", {
-    x: 150,
-    y: 220,
-    width: 240,
-    height: 120,
-  });
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 100,
+  }, "general");
 
-  assert.equal(sidecar.has("VehicleModel::Vehicle"), true);
-  const pos = sidecar.get("VehicleModel::Vehicle");
-  assert.ok(pos);
-  assert.equal(pos.x, 150);
-  assert.equal(pos.y, 220);
-  assert.equal(pos.userMoved, true);
+  // Set interconnection view position (large parent container)
+  sidecar.set("VehicleModel::Vehicle", {
+    x: 50,
+    y: 50,
+    width: 600,
+    height: 400,
+  }, "interconnection");
+
+  assert.equal(sidecar.has("VehicleModel::Vehicle", "general"), true);
+  assert.equal(sidecar.has("VehicleModel::Vehicle", "interconnection"), true);
+
+  const genPos = sidecar.get("VehicleModel::Vehicle", "general");
+  const interPos = sidecar.get("VehicleModel::Vehicle", "interconnection");
+
+  assert.ok(genPos);
+  assert.ok(interPos);
+  assert.equal(genPos.width, 200);
+  assert.equal(interPos.width, 600);
+  assert.notEqual(genPos.width, interPos.width, "Dimensions must be isolated across viewTypes");
 });
 
 test("Theme resolution supports all 3 skins with correct contrast and ISO flags", () => {
@@ -193,4 +207,60 @@ test("runElkLayout generates non-overlapping coordinates for multi-node graph wi
     posBattery.x + posBattery.width <= posMotor.x,
     `Nodes must not overlap: battery.right=${posBattery.x + posBattery.width} should be <= motor.left=${posMotor.x}`,
   );
+});
+
+test("runElkLayout correctly resolves hierarchy when child appears before parent in array", async () => {
+  const sampleIR: SysMLViewIR = {
+    schemaVersion: "2.0",
+    sourceSha256: "test-sha-order",
+    rootPackageName: "NestedSys",
+    viewType: "general",
+    nodes: [
+      // Child appears FIRST in array
+      {
+        id: "child1",
+        semanticId: "e2",
+        qualifiedName: "NestedSys::parent1::child1",
+        name: "child1",
+        kind: "PartUsage",
+        shapeCategory: "usage",
+        stereotype: "«part»",
+        parentId: "parent1",
+        layer: "L2_Structure",
+        compartments: [],
+        ports: [],
+      },
+      // Parent appears SECOND in array
+      {
+        id: "parent1",
+        semanticId: "e1",
+        qualifiedName: "NestedSys::parent1",
+        name: "parent1",
+        kind: "PartDefinition",
+        shapeCategory: "definition",
+        stereotype: "«part def»",
+        parentId: null,
+        layer: "L1_Definitions",
+        compartments: [],
+        ports: [],
+      },
+    ],
+    edges: [],
+    summary: {
+      displayedNodes: 2,
+      displayedEdges: 0,
+      omittedElements: 0,
+    },
+  };
+
+  const layout = await runElkLayout(sampleIR);
+  assert.ok(layout.positions.has("parent1"));
+  assert.ok(layout.positions.has("child1"));
+
+  const parentPos = layout.positions.get("parent1")!;
+  const childPos = layout.positions.get("child1")!;
+
+  // Child must be located within parent bounds
+  assert.ok(childPos.x >= parentPos.x);
+  assert.ok(childPos.y >= parentPos.y);
 });

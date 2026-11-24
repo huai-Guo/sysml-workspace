@@ -30,6 +30,14 @@ export interface SysMLPort {
   line?: number;
 }
 
+export type LayerId =
+  | "L0_Frame"
+  | "L1_Definitions"
+  | "L2_Structure"
+  | "L3_Behavior"
+  | "L4_Connections"
+  | "L5_Requirements";
+
 export interface SysMLViewNode {
   id: string;
   semanticId: string;
@@ -44,6 +52,7 @@ export interface SysMLViewNode {
   compartments: Compartment[];
   ports: SysMLPort[];
   sourceLocation?: SourceLocation;
+  collapsed?: boolean;
 }
 
 export interface SysMLViewEdge {

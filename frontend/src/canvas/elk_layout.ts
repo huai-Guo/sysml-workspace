@@ -50,12 +50,15 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
     return { positions, width: 800, height: 600 };
   }
 
-  // Group nodes by parentId
+  // Pass 1: populate nodeMap completely to eliminate ordering dependencies
   const nodeMap = new Map<string, SysMLViewNode>();
-  const childrenMap = new Map<string | null, SysMLViewNode[]>();
-
   for (const node of viewIR.nodes) {
     nodeMap.set(node.id, node);
+  }
+
+  // Pass 2: build children hierarchy with fully populated nodeMap
+  const childrenMap = new Map<string | null, SysMLViewNode[]>();
+  for (const node of viewIR.nodes) {
     const pId = node.parentId && nodeMap.has(node.parentId) ? node.parentId : null;
     if (!childrenMap.has(pId)) {
       childrenMap.set(pId, []);

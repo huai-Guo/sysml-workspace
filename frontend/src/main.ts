@@ -68,8 +68,9 @@ sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
 const results = new Results(
   api,
   fail,
-  (source) => void applySource(source),
+  (source, skipConfirm) => void applySource(source, skipConfirm),
   (loc) => sourceEditor.go(loc),
+  () => sourceEditor.value,
 );
 const example = `package Electrical {
     port def Power;

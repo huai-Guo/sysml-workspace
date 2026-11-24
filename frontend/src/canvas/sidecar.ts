@@ -43,17 +43,20 @@ export class LayoutSidecar {
     }
   }
 
-  public get(id: string): NodeLayoutPosition | undefined {
-    return this.memoryCache.get(id);
+  public get(id: string, viewType?: string): NodeLayoutPosition | undefined {
+    const key = viewType ? `${viewType}::${id}` : id;
+    return this.memoryCache.get(key) || this.memoryCache.get(id);
   }
 
-  public set(id: string, pos: NodeLayoutPosition): void {
-    this.memoryCache.set(id, { ...pos, userMoved: true });
+  public set(id: string, pos: NodeLayoutPosition, viewType?: string): void {
+    const key = viewType ? `${viewType}::${id}` : id;
+    this.memoryCache.set(key, { ...pos, userMoved: true });
     this.saveToStorage();
   }
 
-  public has(id: string): boolean {
-    return this.memoryCache.has(id);
+  public has(id: string, viewType?: string): boolean {
+    const key = viewType ? `${viewType}::${id}` : id;
+    return this.memoryCache.has(key) || this.memoryCache.has(id);
   }
 
   public getAll(): Map<string, NodeLayoutPosition> {

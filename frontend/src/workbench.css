@@ -2629,3 +2629,94 @@ dialog::backdrop {
   background: rgba(244, 63, 94, 0.12);
   color: #fb7185;
 }
+
+/* ==========================================================================
+   Milestone R2: CAD Precision Controls, Rulers, Layers & SysML Palette Styles
+   ========================================================================== */
+
+.cad-ruler-corner {
+  background-color: var(--bg-card-header, #161f2e);
+  border-right: 1px solid var(--border-subtle, #273549);
+  border-bottom: 1px solid var(--border-subtle, #273549);
+  font-family: ui-monospace, monospace;
+}
+
+.cad-status-bar {
+  background: var(--bg-card-header, #131b26);
+  border-top: 1px solid var(--border-subtle, #273549);
+}
+
+.cad-mode-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, #273549);
+  border-radius: 3px;
+  color: var(--text-muted, #64748b);
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  padding: 1px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cad-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #f1f5f9);
+}
+
+.cad-mode-btn.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: var(--accent-blue, #38bdf8);
+  color: var(--accent-blue, #38bdf8);
+}
+
+.cad-selection-box {
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.cad-layers-panel {
+  background: var(--bg-card, #131b26);
+  border: 1px solid var(--border-subtle, #273549);
+}
+
+.cad-layers-panel.collapsed {
+  width: 32px !important;
+  overflow: hidden !important;
+}
+
+.cad-layers-panel.collapsed .cad-panel-header span:last-child,
+.cad-layers-panel.collapsed .cad-panel-body {
+  display: none !important;
+}
+
+.sysml-palette {
+  background: var(--bg-card, #131b26);
+  border: 1px solid var(--border-subtle, #273549);
+}
+
+.sysml-palette.collapsed {
+  width: 32px !important;
+  overflow: hidden !important;
+}
+
+.sysml-palette.collapsed .palette-header span:last-child,
+.sysml-palette.collapsed .palette-body {
+  display: none !important;
+}
+
+.cad-minimap-container {
+  background: var(--bg-card, #131b26);
+  border: 1px solid var(--border-subtle, #273549);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.cad-minimap-container .x6-widget-minimap {
+  background: transparent !important;
+}
+
+.inline-rename-input {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  outline: none;
+}

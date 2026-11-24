@@ -40,6 +40,10 @@ export function registerSysMLShapes(): void {
             tagName: "text",
             selector: "compartments",
           },
+          {
+            tagName: "text",
+            selector: "foldBtn",
+          },
         ],
         attrs: {
           packageTab: {
@@ -109,16 +113,41 @@ export function registerSysMLShapes(): void {
             fill: "#94a3b8",
             text: "",
           },
+          foldBtn: {
+            ref: "header",
+            refX: "100%",
+            refX2: -16,
+            refY: 20,
+            textAnchor: "middle",
+            dominantBaseline: "central",
+            fontSize: 11,
+            fontFamily: "ui-monospace, monospace, sans-serif",
+            fill: "#94a3b8",
+            cursor: "pointer",
+            text: "▾",
+            display: "none",
+          },
         },
         ports: {
           groups: {
             W: {
               position: "left",
+              markup: [
+                { tagName: "line", selector: "stub" },
+                { tagName: "rect", selector: "pin" },
+              ],
               attrs: {
-                rect: {
+                stub: {
+                  x1: -10,
+                  y1: 0,
+                  x2: 0,
+                  y2: 0,
+                  strokeWidth: 1.5,
+                },
+                pin: {
                   width: 8,
                   height: 8,
-                  x: -4,
+                  x: -14,
                   y: -4,
                   magnet: true,
                   strokeWidth: 1.5,
@@ -131,17 +160,28 @@ export function registerSysMLShapes(): void {
               label: {
                 position: {
                   name: "left",
-                  args: { x: -8 },
+                  args: { x: -16 },
                 },
               },
             },
             E: {
               position: "right",
+              markup: [
+                { tagName: "line", selector: "stub" },
+                { tagName: "rect", selector: "pin" },
+              ],
               attrs: {
-                rect: {
+                stub: {
+                  x1: 0,
+                  y1: 0,
+                  x2: 10,
+                  y2: 0,
+                  strokeWidth: 1.5,
+                },
+                pin: {
                   width: 8,
                   height: 8,
-                  x: -4,
+                  x: 6,
                   y: -4,
                   magnet: true,
                   strokeWidth: 1.5,
@@ -154,18 +194,29 @@ export function registerSysMLShapes(): void {
               label: {
                 position: {
                   name: "right",
-                  args: { x: 8 },
+                  args: { x: 16 },
                 },
               },
             },
             N: {
               position: "top",
+              markup: [
+                { tagName: "line", selector: "stub" },
+                { tagName: "rect", selector: "pin" },
+              ],
               attrs: {
-                rect: {
+                stub: {
+                  x1: 0,
+                  y1: -10,
+                  x2: 0,
+                  y2: 0,
+                  strokeWidth: 1.5,
+                },
+                pin: {
                   width: 8,
                   height: 8,
                   x: -4,
-                  y: -4,
+                  y: -14,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
@@ -177,18 +228,29 @@ export function registerSysMLShapes(): void {
               label: {
                 position: {
                   name: "top",
-                  args: { y: -8 },
+                  args: { y: -16 },
                 },
               },
             },
             S: {
               position: "bottom",
+              markup: [
+                { tagName: "line", selector: "stub" },
+                { tagName: "rect", selector: "pin" },
+              ],
               attrs: {
-                rect: {
+                stub: {
+                  x1: 0,
+                  y1: 0,
+                  x2: 0,
+                  y2: 10,
+                  strokeWidth: 1.5,
+                },
+                pin: {
                   width: 8,
                   height: 8,
                   x: -4,
-                  y: -4,
+                  y: 6,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
@@ -200,7 +262,7 @@ export function registerSysMLShapes(): void {
               label: {
                 position: {
                   name: "bottom",
-                  args: { y: 8 },
+                  args: { y: 16 },
                 },
               },
             },
@@ -293,11 +355,16 @@ export function buildNodeAttrs(
     divider: {
       stroke: theme.node.dividerColor,
       strokeWidth: theme.node.strokeWidth,
-      display: hasCompartments ? "block" : "none",
+      display: hasCompartments && !node.collapsed ? "block" : "none",
     },
     compartments: {
       fill: theme.node.textSecondary,
       text: compartmentsText,
+      display: hasCompartments && !node.collapsed ? "block" : "none",
+    },
+    foldBtn: {
+      fill: theme.node.textSecondary,
+      text: node.collapsed ? "▸" : "▾",
       display: hasCompartments ? "block" : "none",
     },
   };
@@ -320,14 +387,19 @@ export function buildPortItems(
             ? "◆"
             : "▫";
     const conjPrefix = port.conjugated ? "~" : "";
+    const conjBadge = port.conjugated ? " [~]" : "";
     const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
-    const portLabel = `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}`;
+    const portLabel = `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`;
 
     return {
       id: port.id,
       group,
       attrs: {
-        rect: {
+        stub: {
+          stroke: theme.port.stroke,
+          strokeWidth: 1.5,
+        },
+        pin: {
           fill: theme.port.fill,
           stroke: theme.port.stroke,
           strokeWidth: 1.5,

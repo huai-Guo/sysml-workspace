@@ -136,12 +136,12 @@ export interface SysMLViewEdge {
 ---
 
 ### Milestone R2：工业 CAD 精度控制体系 + Draw.io 级编辑与代码反向同步
-- [ ] **R2.1 CAD 精度辅助与图层系统**：
+- [x] **R2.1 CAD 精度辅助与图层系统**：
   - 实现画布顶部与左侧 **动态工程刻度标尺（Zoom-Adaptive Rulers）** 与底部 **CAD 精度状态栏**（实时光标世界坐标 `X, Y`、缩放比、`GRID` 网格、`SNAP` 栅格吸附、`OSNAP` 管脚/中点捕捉、`F8 ORTHO` 正交走线锁定、`SHEET` 图框开关）；
   - 实现 AutoCAD 经典框选区分：**从左向右拖出实线蓝框（全包含才选中）vs 从右向左拖出虚线绿框（碰边即选中）**；
   - 实现右侧可折叠 **CAD 图层与数值属性面板**：支持 `L0~L5` 六个语义图层独立显隐（👁）与防误触锁定（🔒），支持直接输入精确数字修改选中节点的 `X, Y, W, H`；
   - 接入对齐辅助线（Snapline）、正交连线中段/拐点自由拖拽、`Ctrl+Z / Ctrl+Y` 撤销重做、对齐/等距分布工具与右下角小地图（Minimap）。
-- [ ] **R2.2 画布到 `.sysml` 代码反向语义编辑**：
+- [x] **R2.2 画布到 `.sysml` 代码反向语义编辑**：
   - 实现左侧可收起 **SysML v2 标准元件库（Palette）**：支持拖拽新建 `Package`、`Part Def`、`Part`、`Port`、`State`、`Requirement` 到画布或父容器内；
   - 支持从源端口磁吸靶拖出连线至目标端口（自动生成 `connection` / `transition` / `satisfy`）、双击节点原地改名、按 `Delete` 安全删除（联动后端 `SemanticCommandCompiler` 与 `reference_integrity` 校验后精准更新编辑器 `.sysml` 源码）。
 - **R2 验收标准**：图层显隐/锁定、数值坐标定位、撤销重做均正常工作；在画布拖入部件并连端口后，左侧 CodeMirror 6 源码实时合法更新并通过 Pilot 编译。

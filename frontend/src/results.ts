@@ -57,8 +57,9 @@ export class Results {
   constructor(
     private api: ApiClient,
     private fail: (e: unknown) => void,
-    private apply: (code: string) => void,
+    private apply: (code: string, skipConfirm?: boolean) => void,
     private jumpToSource?: (location: { offset?: number; line?: number; column?: number }) => void,
+    private getSource?: () => string,
   ) {
     const tabs = [
       ...document.querySelectorAll<HTMLButtonElement>("[data-tab]"),
@@ -111,10 +112,36 @@ export class Results {
           onSelect: (loc) => {
             if (loc) this.jumpToSource?.(loc);
           },
+          getSource: () => this.getSource?.() || this.current?.result?.sysml_source || "",
+          applySource: (newSource, skipConfirm) => {
+            this.apply(newSource, skipConfirm);
+          },
+          showNotice: (msg) => {
+            const noticeEl = optEl("notice-text");
+            if (noticeEl) {
+              noticeEl.textContent = msg;
+              const n = optEl("notice");
+              if (n) n.hidden = false;
+            }
+          },
         });
       } catch (err) {
         console.warn("Canvas engine init skipped or failed:", err);
       }
+    }
+
+    const togglePaletteBtn = optEl<HTMLButtonElement>("toggle-palette-btn");
+    if (togglePaletteBtn) {
+      togglePaletteBtn.onclick = () => {
+        this.canvasEngine?.palette?.toggleCollapse();
+      };
+    }
+
+    const toggleLayersBtn = optEl<HTMLButtonElement>("toggle-layers-btn");
+    if (toggleLayersBtn) {
+      toggleLayersBtn.onclick = () => {
+        this.canvasEngine?.layersPanel?.toggleCollapse();
+      };
     }
 
     const resetLayoutBtn = optEl<HTMLButtonElement>("reset-layout");
