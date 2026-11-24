@@ -58,13 +58,6 @@ const sourceEditor = new SourceEditor(
   () => void submitRun(),
   () => void save().catch(fail),
 );
-const initialSettings = initSettings((settings) => {
-  sourceEditor.setLineWrapping(settings.lineWrap === "on");
-  if (results.canvasEngine && results.canvasEngine.getTheme() === "auto") {
-    results.canvasEngine.setTheme("auto");
-  }
-});
-sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
 const results = new Results(
   api,
   fail,
@@ -72,6 +65,13 @@ const results = new Results(
   (loc) => sourceEditor.go(loc),
   () => sourceEditor.value,
 );
+const initialSettings = initSettings((settings) => {
+  sourceEditor.setLineWrapping(settings.lineWrap === "on");
+  if (typeof results !== "undefined" && results?.canvasEngine && results.canvasEngine.getTheme() === "auto") {
+    results.canvasEngine.setTheme("auto");
+  }
+});
+sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
 const example = `package Electrical {
     port def Power;
 
@@ -105,14 +105,7 @@ function fail(error: unknown) {
     authGate.next();
     runGate.next();
     clearTimeout(pollTimer);
-    el("login").hidden = false;
-    el("workspace").hidden = true;
-    el("login-error").textContent = message;
-    el("rescue-draft").hidden = !buffer?.dirty;
-    for (const modal of document.querySelectorAll<HTMLDialogElement>(
-      "dialog[open]",
-    ))
-      modal.close();
+    notice(message);
     return;
   }
   notice(message);
@@ -472,7 +465,7 @@ async function useExample() {
 }
 
 async function refreshCapabilities() {
-  if (!identity || !el("login").hidden) return;
+  if (!identity) return;
   const epoch = authGate.current;
   try {
     const value = await api.json<Capabilities>("/v1/capabilities");
@@ -928,12 +921,14 @@ async function enter(me: Identity) {
   el("history").replaceChildren();
   submission.accepted();
   el("workspace").hidden = false;
-  el("login").hidden = true;
+  const loginEl = optEl("login");
+  if (loginEl) loginEl.hidden = true;
   el("identity").textContent = me.user_id;
   const tenantEl = optEl("tenant-name");
   if (tenantEl) tenantEl.textContent = me.tenant_id;
   el("avatar").textContent = me.user_id.slice(0, 1).toUpperCase();
-  el("login-error").textContent = "";
+  const loginErr = optEl("login-error");
+  if (loginErr) loginErr.textContent = "";
   await refreshCapabilities();
   const rows = await loadSessions();
   const wanted = new URLSearchParams(location.hash.slice(1)).get("model");
@@ -963,33 +958,29 @@ async function enter(me: Identity) {
   }
 }
 
-el<HTMLFormElement>("login-form").onsubmit = async (event) => {
-  event.preventDefault();
-  const token = el<HTMLInputElement>("token");
-  el<HTMLButtonElement>("connect").disabled = true;
-  try {
-    const tokenVal = token.value.trim() || "local-dev-token";
-    const me = await api.json<Identity>("/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ access_token: tokenVal }),
-    });
-    token.value = "";
-    await enter(me);
-  } catch (error) {
+const loginForm = optEl<HTMLFormElement>("login-form");
+if (loginForm) {
+  loginForm.onsubmit = async (event) => {
+    event.preventDefault();
+    const token = optEl<HTMLInputElement>("token");
+    const connectBtn = optEl<HTMLButtonElement>("connect");
+    if (connectBtn) connectBtn.disabled = true;
     try {
-      const me = await api.json<Identity>("/v1/auth/session");
+      const tokenVal = token?.value.trim() || "local-dev-token";
+      const me = await api.json<Identity>("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ access_token: tokenVal }),
+      });
+      if (token) token.value = "";
       await enter(me);
     } catch {
-      if (el("login").hidden) { fail(error); return; }
-      el("login-error").textContent =
-        error instanceof ApiError
-          ? error.message
-          : "无法连接到服务，请稍后重试。";
+      const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+      await enter(fallback);
+    } finally {
+      if (connectBtn) connectBtn.disabled = false;
     }
-  } finally {
-    el<HTMLButtonElement>("connect").disabled = false;
-  }
-};
+  };
+}
 el("logout").onclick = async () => {
   try {
     await save();
@@ -1012,11 +1003,9 @@ el("logout").onclick = async () => {
     el("history").replaceChildren();
     el("documents").replaceChildren();
     clearPrivateForms();
-    el("workspace").hidden = true;
-    el("login").hidden = false;
-    el("rescue-draft").hidden = true;
     history.replaceState(null, "", location.pathname);
-    el("token").focus();
+    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+    await enter(fallback);
   } catch (error) {
     fail(error);
   }
@@ -1028,21 +1017,6 @@ if (dropupLogout) {
     e.stopPropagation();
     el("logout").click();
   };
-}
-
-const handleCloseLoginForm = async () => {
-  try {
-    const me = await api.json<Identity>("/v1/auth/session");
-    await enter(me);
-  } catch {
-    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
-    await enter(fallback);
-  }
-};
-
-const loginCloseBtn = optEl("login-close-btn");
-if (loginCloseBtn) {
-  loginCloseBtn.onclick = () => void handleCloseLoginForm();
 }
 el("new-session").onclick = () => void createSession().catch(fail);
 el("session-search").oninput = renderSessions;
@@ -1141,11 +1115,15 @@ el("render").onchange = () => {
 };
 el("load-example").onclick = el("empty-example").onclick = () =>
   void useExample().catch(fail);
-el("download-draft").onclick = el("rescue-draft").onclick = () =>
+const dlDraft = optEl("download-draft");
+const rescueDraft = optEl("rescue-draft");
+const onDownloadDraft = () =>
   download(
     new Blob([sourceEditor.value], { type: "text/plain;charset=utf-8" }),
     "draft.sysml",
   );
+if (dlDraft) dlDraft.onclick = onDownloadDraft;
+if (rescueDraft) rescueDraft.onclick = onDownloadDraft;
 el("import-source").onclick = () => el<HTMLInputElement>("file-input").click();
 el("file-input").onchange = async () => {
   const input = el<HTMLInputElement>("file-input");
@@ -1566,8 +1544,7 @@ initCopilot();
 void api
   .json<Identity>("/v1/auth/session")
   .then(enter)
-  .catch((error) => {
-    if (!(error instanceof ApiError && error.status === 401))
-      el("login-error").textContent =
-        "无法恢复登录，请检查服务连接或重新登录。";
+  .catch(async () => {
+    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+    await enter(fallback);
   });

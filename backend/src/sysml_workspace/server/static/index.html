@@ -3,28 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csp-nonce" content="__CSP_NONCE__"><title>SysML Workbench · 建模工作台</title><link rel="stylesheet" href="/assets/workbench.css"><script type="module" src="/assets/workbench.js"></script></head>
 <body>
 <a href="#editor-region" class="skip-link">跳到模型编辑器</a>
-<section id="login" class="login-screen">
-  <div class="login-card">
-    <button id="login-close-btn" class="icon-button login-close-btn" title="关闭表单并进入工作台" aria-label="关闭表单并进入工作台">×</button>
-    <div class="login-header">
-      <div class="wordmark">
-        <svg viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>
-        SysML<span>Workbench</span>
-      </div>
-      <h2>进入工作空间</h2>
-    </div>
-    <form id="login-form">
-      <label for="token">访问令牌 (本地开发可直接进入)</label>
-      <input id="token" type="password" autocomplete="off" placeholder="直接进入或输入令牌">
-      <div class="login-actions">
-        <button id="connect" class="button primary wide" type="submit">进入工作台 <span aria-hidden="true">→</span></button>
-      </div>
-      <p id="login-error" role="alert"></p>
-      <button id="rescue-draft" class="button ghost" type="button" hidden>下载未保存的本地草稿</button>
-    </form>
-  </div>
-</section>
-<div id="workspace" class="app-shell" hidden>
+<div id="workspace" class="app-shell">
   <aside id="sidebar" class="sidebar" aria-label="工程与会话导航">
     <div class="sidebar-header">
       <div class="wordmark">
@@ -294,15 +273,15 @@
                     <button id="btn-cad-command" class="button ghost compact" title="CAD 命令行唤醒栏 (快捷键: /)">⌨ 命令行</button>
                     <button id="btn-import-diagram" class="button secondary compact" title="导入文件 (.sysml / .drawio / .json / .svg)">📥 导入</button>
                     <input id="diagram-file-input" type="file" accept=".sysml,.kerml,.drawio,.xml,.json,.svg" hidden>
-                    <div class="dropdown-wrap" id="export-dropdown-wrap" style="position: relative; display: inline-block;">
+                    <div class="dropdown-wrap" id="export-dropdown-wrap">
                       <button id="btn-export-menu" class="button primary compact" title="全格式导出中心 (DXF / Draw.io / PNG / SVG / JSON)">📤 导出 ▾</button>
-                      <div id="export-menu-popover" class="export-menu-popover" hidden style="position: absolute; right: 0; top: calc(100% + 4px); background: var(--bg-card, #131b26); border: 1px solid var(--border-subtle, #273549); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 50; width: 195px; padding: 4px; display: flex; flex-direction: column; gap: 2px;">
+                      <div id="export-menu-popover" class="export-menu-popover" hidden>
                         <button class="export-menu-item" data-export="dxf">📐 AutoCAD 图纸 (.dxf)</button>
                         <button class="export-menu-item" data-export="drawio">🔷 可编辑图 (.drawio)</button>
                         <button class="export-menu-item" data-export="png-2x">🖼 出版级图片 (.png 2x)</button>
                         <button class="export-menu-item" data-export="png-4x">🖼 论文超清图 (.png 4x)</button>
                         <button class="export-menu-item" data-export="svg">✒️ 矢量图 (.svg 独立版)</button>
-                        <div style="height: 1px; background: var(--border-subtle, #273549); margin: 2px 0;"></div>
+                        <div class="export-menu-divider"></div>
                         <button class="export-menu-item" data-export="json">📦 工作台工程包 (.sysmlwb.json)</button>
                         <button class="export-menu-item" data-export="sysml">📄 纯代码 (.sysml)</button>
                       </div>
