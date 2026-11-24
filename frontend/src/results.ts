@@ -3,6 +3,8 @@ import { ApiClient, messages } from "./api";
 import { SourceEditor } from "./editor";
 import { active } from "./state";
 import type { Run, Entity } from "./types";
+import { SysMLCanvasEngine } from "./canvas/engine";
+import type { CanvasThemeId, ViewType } from "./canvas/types";
 
 export const taskNames = {
   generate: "生成代码",
@@ -47,6 +49,7 @@ export function badge(status: string) {
 
 export class Results {
   current?: Run;
+  public canvasEngine?: SysMLCanvasEngine;
   private resultEditor = new SourceEditor(el("result-editor"), true);
   private imageUrl?: string;
   private width = 600;
@@ -55,6 +58,7 @@ export class Results {
     private api: ApiClient,
     private fail: (e: unknown) => void,
     private apply: (code: string) => void,
+    private jumpToSource?: (location: { offset?: number; line?: number; column?: number }) => void,
   ) {
     const tabs = [
       ...document.querySelectorAll<HTMLButtonElement>("[data-tab]"),
@@ -99,12 +103,75 @@ export class Results {
           this.fail(e);
         }
       };
+
+    const canvasContainer = optEl("sysml-canvas-container");
+    if (canvasContainer) {
+      try {
+        this.canvasEngine = new SysMLCanvasEngine(canvasContainer, {
+          onSelect: (loc) => {
+            if (loc) this.jumpToSource?.(loc);
+          },
+        });
+      } catch (err) {
+        console.warn("Canvas engine init skipped or failed:", err);
+      }
+    }
+
+    const resetLayoutBtn = optEl<HTMLButtonElement>("reset-layout");
+    if (resetLayoutBtn) {
+      resetLayoutBtn.onclick = () => this.canvasEngine?.resetLayout();
+    }
+
+    const themeSelect = optEl<HTMLSelectElement>("canvas-theme-select");
+    if (themeSelect) {
+      themeSelect.onchange = () => {
+        this.canvasEngine?.setTheme(themeSelect.value as CanvasThemeId);
+      };
+    }
+
+    const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
+    for (const btn of viewTypeBtns) {
+      btn.onclick = () => {
+        const v = btn.dataset.view as ViewType;
+        if (this.canvasEngine && v) {
+          const ok = this.canvasEngine.switchView(v);
+          if (ok) {
+            viewTypeBtns.forEach((b) => {
+              b.classList.toggle("active", b === btn);
+              b.setAttribute("aria-selected", String(b === btn));
+            });
+            const summary = optEl("diagram-summary");
+            if (summary && this.current?.result?.diagram?.views?.[v]) {
+              const s = this.current.result.diagram.views[v].summary;
+              summary.textContent = `${s.displayedNodes} 个节点 · ${s.displayedEdges} 条连线 · 视图: ${v}`;
+            }
+          }
+        }
+      };
+    }
+
     el("zoom-fit").onclick = () => {
-      this.fit = true;
-      this.resize();
+      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+        this.canvasEngine.zoomFit();
+      } else {
+        this.fit = true;
+        this.resize();
+      }
     };
-    el("zoom-in").onclick = () => this.zoom(1.3);
-    el("zoom-out").onclick = () => this.zoom(1 / 1.3);
+    el("zoom-in").onclick = () => {
+      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+        this.canvasEngine.zoomIn();
+      } else {
+        this.zoom(1.3);
+      }
+    };
+    el("zoom-out").onclick = () => {
+      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+        this.canvasEngine.zoomOut();
+      } else {
+        this.zoom(1 / 1.3);
+      }
+    };
     const viewport = el("diagram-viewport");
     let dragging:
       | undefined
@@ -434,37 +501,60 @@ export class Results {
     if (job.status === "failed") {
       this.setLoading(false);
     }
-    if (result.diagram?.svg) {
-      if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
-      this.imageUrl = URL.createObjectURL(
-        new Blob([result.diagram.svg], { type: "image/svg+xml" }),
-      );
-      const image = optEl<HTMLImageElement>("diagram-image");
-      if (image) {
-        image.src = this.imageUrl;
-        image.hidden = false;
-      }
+    if (result.diagram) {
       this.setLoading(false);
       const diagEmpty = optEl("diagram-empty");
       if (diagEmpty) diagEmpty.hidden = true;
       const diagViewport = optEl("diagram-viewport");
       if (diagViewport) diagViewport.classList.add("has-diagram");
-      this.fit = true;
-      this.resize();
-      for (const id of ["zoom-in", "zoom-out", "zoom-fit"]) {
+
+      for (const id of ["zoom-in", "zoom-out", "zoom-fit", "reset-layout"]) {
         const zBtn = optEl<HTMLButtonElement>(id);
         if (zBtn) zBtn.disabled = false;
       }
-      const cov = result.diagram.coverage;
-      const diagSumm = optEl("diagram-summary");
-      if (diagSumm) {
-        diagSumm.textContent = cov
-          ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
-          : "";
-      }
-      const diagCov = optEl("diagram-coverage");
-      if (diagCov) {
-        diagCov.textContent = "";
+
+      if (result.diagram.view_ir && this.canvasEngine) {
+        const canvasContainer = optEl("sysml-canvas-container");
+        if (canvasContainer) canvasContainer.hidden = false;
+        const image = optEl<HTMLImageElement>("diagram-image");
+        if (image) image.hidden = true;
+
+        this.canvasEngine.setScope(job.session_id || "default");
+        void this.canvasEngine.render(result.diagram.view_ir, result.diagram.views);
+
+        const summary = result.diagram.view_ir.summary;
+        const diagSumm = optEl("diagram-summary");
+        if (diagSumm) {
+          diagSumm.textContent = `${summary.displayedNodes} 个节点 · ${summary.displayedEdges} 条连线 · 视图: ${result.diagram.view_ir.viewType}`;
+        }
+
+        const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
+        viewTypeBtns.forEach((b) => {
+          const isActive = b.dataset.view === result.diagram?.view_ir?.viewType;
+          b.classList.toggle("active", isActive);
+          b.setAttribute("aria-selected", String(isActive));
+        });
+      } else if (result.diagram.svg) {
+        const canvasContainer = optEl("sysml-canvas-container");
+        if (canvasContainer) canvasContainer.hidden = true;
+        if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
+        this.imageUrl = URL.createObjectURL(
+          new Blob([result.diagram.svg], { type: "image/svg+xml" }),
+        );
+        const image = optEl<HTMLImageElement>("diagram-image");
+        if (image) {
+          image.src = this.imageUrl;
+          image.hidden = false;
+        }
+        this.fit = true;
+        this.resize();
+        const cov = result.diagram.coverage;
+        const diagSumm = optEl("diagram-summary");
+        if (diagSumm) {
+          diagSumm.textContent = cov
+            ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
+            : "";
+        }
       }
     }
   }

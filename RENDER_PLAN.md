@@ -123,10 +123,10 @@ export interface SysMLViewEdge {
 ---
 
 ### Milestone R1：多视图富语义投影 + `elkjs` 正交排版 + 三皮肤交互画布底座
-- [ ] **R1.1 后端多视图 `ViewIR v2` 投影引擎**：
+- [x] **R1.1 后端多视图 `ViewIR v2` 投影引擎**：
   - 在 `backend/src/sysml_workspace/diagram/` 下建立正式的 `view_ir.py` 与多视图投影器（吸收并规整 `prototype/` 代码），将父子 `ownership` 转化为 **容器嵌套（Interconnection/State 视图）** 或 **分栏隔间（General 视图）**，提取端口方向 `in/out` 与共轭 `~` 信息；
   - 更新 `local_executor.py` 与相关渲染 API，同时返回 `view_ir`（保留旧 `svg` 字段兼容降级，主界面全面切至 `view_ir`）。
-- [ ] **R1.2 前端 `@antv/x6` + `elkjs` 交互画布挂载**：
+- [x] **R1.2 前端 `@antv/x6` + `elkjs` 交互画布挂载**：
   - 在 `frontend/` 安装 `@antv/x6` 与 `elkjs`，新建模块化目录 `frontend/src/canvas/`（`engine.ts`, `elk_layout.ts`, `shapes.ts`, `themes.ts`, `sidecar.ts`）；
   - 改造 `index.html` 与 `results.ts`：用交互式画布挂载点替代死图片 `<img id="diagram-image">`，实现 **OMG 标准图形符号区分**（`Definition` 直角框、`Usage` 圆角框、`Package` 折耳框、可折叠隔间、EPLAN 原理图式带引出短线与极性箭头的边界管脚 `Port`）；
   - 配置正交路由（`manhattan`/`orth`）与 **交叉线自动跨线桥弧 `⌒`（`jumpover` 连接器）**；

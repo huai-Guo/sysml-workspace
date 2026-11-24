@@ -268,16 +268,31 @@
             <div class="panel-content" id="panel-content-view" data-tab-id="view">
               <div id="tab-diagram" class="diagram-tab" role="region" aria-label="SysML 架构视图">
                 <div class="diagram-toolbar">
-                  <span id="diagram-summary" class="diagram-summary"></span>
+                  <div class="diagram-toolbar-left">
+                    <div class="view-type-tabs" id="view-type-selector" role="tablist" aria-label="架构视图模式">
+                      <button class="view-type-btn active" data-view="general" role="tab" aria-selected="true" title="综合结构视图 (General)">🌐 结构</button>
+                      <button class="view-type-btn" data-view="interconnection" role="tab" aria-selected="false" title="内部端口互联视图 (Interconnection)">🔌 互联</button>
+                      <button class="view-type-btn" data-view="state" role="tab" aria-selected="false" title="状态机行为视图 (State Machine)">⚡ 状态</button>
+                      <button class="view-type-btn" data-view="requirements" role="tab" aria-selected="false" title="需求满足追溯视图 (Requirements)">🎯 需求</button>
+                    </div>
+                    <span id="diagram-summary" class="diagram-summary"></span>
+                  </div>
                   <div class="diagram-controls">
-                    <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新视图">🔄 刷新视图</button>
-                    <button id="zoom-out" class="icon-button" aria-label="缩小图片">−</button>
+                    <select id="canvas-theme-select" class="select-compact" title="画布制图皮肤" aria-label="画布制图皮肤">
+                      <option value="auto">🎨 跟随主题</option>
+                      <option value="cad-blueprint">🌌 暗黑蓝图</option>
+                      <option value="syson-clean">☀️ 清爽亮色</option>
+                      <option value="iso-drafting">📐 ISO国标图</option>
+                    </select>
+                    <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新视图">🔄 刷新</button>
+                    <button id="reset-layout" class="button ghost compact" title="重置手工位置并恢复自动排版">⟲ 重排</button>
+                    <button id="zoom-out" class="icon-button" aria-label="缩小视图">−</button>
                     <button id="zoom-fit" class="button ghost compact">适应画布</button>
-                    <button id="zoom-in" class="icon-button" aria-label="放大图片">＋</button>
+                    <button id="zoom-in" class="icon-button" aria-label="放大视图">＋</button>
                     <button data-download="diagram.svg" class="button secondary compact" disabled>下载 SVG</button>
                   </div>
                 </div>
-                <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="视图画布，可拖动和滚动">
+                <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="交互式架构视图画布">
                   <!-- Dynamic Progressive Loading Skeleton -->
                   <div id="diagram-loading-skeleton" class="diagram-skeleton" hidden>
                     <div class="skeleton-preview-box">
@@ -286,9 +301,10 @@
                     </div>
                     <div class="skeleton-info">
                       <strong class="skeleton-title" id="skeleton-title-text">正在动态解析与渲染架构视图…</strong>
-                      <p class="skeleton-sub">语义模型提取 · 实体关联拓扑分析 · SVG 排版生成中</p>
+                      <p class="skeleton-sub">语义模型提取 · 实体关联拓扑分析 · ELK 正交布线中</p>
                     </div>
                   </div>
+                  <div id="sysml-canvas-container" class="sysml-canvas-container"></div>
                   <img id="diagram-image" alt="已验证 SysML 的语义视图" hidden>
                   <div id="diagram-empty" class="empty-state">
                     <svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg>

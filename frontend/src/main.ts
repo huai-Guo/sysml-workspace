@@ -60,9 +60,17 @@ const sourceEditor = new SourceEditor(
 );
 const initialSettings = initSettings((settings) => {
   sourceEditor.setLineWrapping(settings.lineWrap === "on");
+  if (results.canvasEngine && results.canvasEngine.getTheme() === "auto") {
+    results.canvasEngine.setTheme("auto");
+  }
 });
 sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
-const results = new Results(api, fail, (source) => void applySource(source));
+const results = new Results(
+  api,
+  fail,
+  (source) => void applySource(source),
+  (loc) => sourceEditor.go(loc),
+);
 const example = `package Electrical {
     port def Power;
 

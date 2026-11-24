@@ -141,9 +141,31 @@ def render_svg(request: RenderRequest) -> dict:
                       f'<text x="{x+16}" y="{y+24}" font-size="12" fill="#65778e">{escape(e.kind)}</text>',
                       f'<text x="{x+16}" y="{y+52}" font-size="17" fill="#19324d">{escape(label)}</text></g>'])
     parts.extend([f'<text x="40" y="{height-25}" font-size="12" fill="#65778e">{len(visible)} elements · {len(edges)} relationships · solid: ownership / dashed: semantic reference</text>', '</g></svg>'])
-    return {"source_sha256": request.source_sha256, "media_type": "image/svg+xml", "svg": "".join(parts),
-            "coverage": {"profile": "authored-semantic-overview", "displayed_entities": len(visible),
-                         "displayed_relations": len(edges), "omitted_entities": len(model.entities) - len(visible),
-                         "omitted_relations": len(model.relations) - len(edges),
-                         "projected_feature_paths": projected_paths,
-                         "note": "Unnamed, external and out-of-scope elements are omitted; engineering correctness is not assessed."}}
+    
+    views_dict = {}
+    view_ir_dict = None
+    try:
+        from .view_ir import ViewProjectionEngine
+        engine = ViewProjectionEngine(model.model_dump(), request.source_sha256, request.root_id)
+        views = engine.project_all()
+        views_dict = {k: v.model_dump() for k, v in views.items()}
+        view_ir_dict = views_dict.get("general")
+    except Exception:
+        pass
+
+    return {
+        "source_sha256": request.source_sha256,
+        "media_type": "image/svg+xml",
+        "svg": "".join(parts),
+        "coverage": {
+            "profile": "authored-semantic-overview",
+            "displayed_entities": len(visible),
+            "displayed_relations": len(edges),
+            "omitted_entities": len(model.entities) - len(visible),
+            "omitted_relations": len(model.relations) - len(edges),
+            "projected_feature_paths": projected_paths,
+            "note": "Unnamed, external and out-of-scope elements are omitted; engineering correctness is not assessed."
+        },
+        "view_ir": view_ir_dict,
+        "views": views_dict,
+    }
