@@ -144,6 +144,70 @@ export class Results {
       };
     }
 
+    // --- Milestone R3: Import & Export UI Handlers ---
+    const importBtn = optEl<HTMLButtonElement>("btn-import-diagram");
+    const importFileInput = optEl<HTMLInputElement>("diagram-file-input");
+    if (importBtn && importFileInput) {
+      importBtn.onclick = () => importFileInput.click();
+      importFileInput.onchange = () => {
+        const file = importFileInput.files?.[0];
+        if (file && this.canvasEngine) {
+          this.canvasEngine.handleImportFile(file).catch(this.fail);
+        }
+        importFileInput.value = "";
+      };
+    }
+
+    const exportMenuBtn = optEl<HTMLButtonElement>("btn-export-menu");
+    const exportPopover = optEl<HTMLElement>("export-menu-popover");
+    if (exportMenuBtn && exportPopover) {
+      exportMenuBtn.onclick = (e) => {
+        e.stopPropagation();
+        exportPopover.hidden = !exportPopover.hidden;
+      };
+      document.addEventListener("click", (e) => {
+        if (!exportPopover.hidden && !exportPopover.contains(e.target as Node) && e.target !== exportMenuBtn) {
+          exportPopover.hidden = true;
+        }
+      });
+    }
+
+    const exportItems = document.querySelectorAll<HTMLButtonElement>(".export-menu-item");
+    for (const item of exportItems) {
+      item.onclick = async () => {
+        if (exportPopover) exportPopover.hidden = true;
+        if (!this.canvasEngine) return;
+
+        const type = item.dataset.export;
+        try {
+          if (type === "dxf") {
+            const dxf = this.canvasEngine.exportDxf();
+            download(new Blob([dxf], { type: "application/dxf" }), "diagram.dxf");
+          } else if (type === "drawio") {
+            const drawio = this.canvasEngine.exportDrawio();
+            download(new Blob([drawio], { type: "application/vnd.jgraph.mxfile" }), "diagram.drawio");
+          } else if (type === "json") {
+            const json = this.canvasEngine.exportWorkbenchJson();
+            download(new Blob([json], { type: "application/json" }), "project.sysmlwb.json");
+          } else if (type === "sysml") {
+            const src = this.getSource?.() || this.current?.result?.sysml_source || "";
+            download(new Blob([src], { type: "text/plain" }), "model.sysml");
+          } else if (type === "svg") {
+            const svg = this.canvasEngine.exportSvg();
+            download(new Blob([svg], { type: "image/svg+xml" }), "diagram.svg");
+          } else if (type === "png-2x") {
+            const blob = await this.canvasEngine.exportPngBlob(2);
+            download(blob, "diagram-2x.png");
+          } else if (type === "png-4x") {
+            const blob = await this.canvasEngine.exportPngBlob(4);
+            download(blob, "diagram-4x.png");
+          }
+        } catch (err) {
+          this.fail(err);
+        }
+      };
+    }
+
     const resetLayoutBtn = optEl<HTMLButtonElement>("reset-layout");
     if (resetLayoutBtn) {
       resetLayoutBtn.onclick = () => this.canvasEngine?.resetLayout();

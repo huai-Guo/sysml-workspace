@@ -149,13 +149,13 @@ export interface SysMLViewEdge {
 ---
 
 ### Milestone R3：全格式“导入 + 导出（含 AutoCAD `.dxf` 与 `.drawio` 互通）”中心
-- [ ] **R3.1 五格式专业导出器（`frontend/src/canvas/exporters/`）**：
+- [x] **R3.1 五格式专业导出器（`frontend/src/canvas/exporters/`）**：
   1. **导出 `.dxf`（AutoCAD 工程图纸）**：生成标准 ASCII R2000 DXF，将 `L0~L5` 语义图层映射为原生 CAD `LAYER` 表，将容器框、隔间线、管脚、正交折线、跨线圆弧与图框标题栏输出为精确 `LWPOLYLINE`、`LINE`、`ARC`、`MTEXT` 图元（确保 AutoCAD / 浩辰 / 中望 / LibreCAD 可直接分层打开编辑）；
   2. **导出 `.drawio` 可编辑文件**：生成标准未压缩 `<mxfile>` XML（内嵌 `sysmlSource` 与 `qualifiedName` 元数据以支持无损导回），可在桌面版/网页版 Draw.io 直接打开编辑；
   3. **导出 `.sysmlwb.json` 工作台工程包** 与 **纯净 `.sysml` 代码文件**；
   4. **导出出版级高清图片 `.png`**（支持 `1x / 2x / 4x` 超采样倍率、白底/透明底/蓝图底、可选是否包含外围 ISO 工程图框，满足 300+ DPI 论文印刷需求）；
   5. **导出独立矢量图 `.svg`**（内联样式与可恢复 `<metadata>` 快照）。
-- [ ] **R3.2 四模式导入器（`frontend/src/canvas/importers/`，支持按钮选择与窗口拖拽放入）**：
+- [x] **R3.2 四模式导入器（`frontend/src/canvas/importers/`，支持按钮选择与窗口拖拽放入）**：
   1. 导入 `.sysml` / `.kerml` 源码自动编译布线；
   2. 导入 `.sysmlwb.json` 像素级无损恢复源码与全部手工布局、折点及图层状态；
   3. 导入 `.drawio` / `.xml`：① 若含本平台元数据则无损恢复源码并同步用户在外部 Draw.io 新调好的坐标；② 若为外部手画普通嵌套框图，自动解析父子矩形、贴边小块与连线，逆向编译生成合法初始 `.sysml` 骨架代码！

@@ -8,6 +8,13 @@ export class CadBoxSelection {
   private startClientY = 0;
   private isSelecting = false;
   private disposed = false;
+  private spacePressed = false;
+
+  private onMouseDownHandler!: (e: MouseEvent) => void;
+  private onMouseMoveHandler!: (e: MouseEvent) => void;
+  private onMouseUpHandler!: (e: MouseEvent) => void;
+  private onKeyDownHandler!: (e: KeyboardEvent) => void;
+  private onKeyUpHandler!: (e: KeyboardEvent) => void;
 
   constructor(container: HTMLElement, graph: Graph) {
     this.container = container;
@@ -26,9 +33,22 @@ export class CadBoxSelection {
   }
 
   private bindEvents(): void {
-    const handleMouseDown = (e: MouseEvent) => {
-      // Only normal primary left button without Space or Ctrl
-      if (e.button !== 0 || (e as any).code === "Space") return;
+    this.onKeyDownHandler = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        this.spacePressed = true;
+      }
+    };
+    this.onKeyUpHandler = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        this.spacePressed = false;
+      }
+    };
+    window.addEventListener("keydown", this.onKeyDownHandler);
+    window.addEventListener("keyup", this.onKeyUpHandler);
+
+    this.onMouseDownHandler = (e: MouseEvent) => {
+      // Suppress box selection when Space is held for panning, or not primary left button
+      if (e.button !== 0 || this.spacePressed) return;
       // Do not trigger if clicking on node, port, or UI widget
       const target = e.target as HTMLElement;
       if (
@@ -164,9 +184,11 @@ export class CadBoxSelection {
       }
     };
 
-    this.container.addEventListener("mousedown", handleMouseDown);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    this.container.addEventListener("mousedown", this.onMouseDownHandler);
+    this.onMouseMoveHandler = handleMouseMove;
+    this.onMouseUpHandler = handleMouseUp;
+    window.addEventListener("mousemove", this.onMouseMoveHandler);
+    window.addEventListener("mouseup", this.onMouseUpHandler);
   }
 
   public dispose(): void {
@@ -175,6 +197,11 @@ export class CadBoxSelection {
 
   public destroy(): void {
     this.disposed = true;
+    this.container.removeEventListener("mousedown", this.onMouseDownHandler);
+    window.removeEventListener("mousemove", this.onMouseMoveHandler);
+    window.removeEventListener("mouseup", this.onMouseUpHandler);
+    window.removeEventListener("keydown", this.onKeyDownHandler);
+    window.removeEventListener("keyup", this.onKeyUpHandler);
     this.boxEl.remove();
   }
 }

@@ -76,8 +76,9 @@ export class SemanticEditor {
 
     // If an owner name is specified, insert inside the owner block
     if (ownerName) {
+      const targetOwner = ownerName.includes("::") ? ownerName.split("::").pop()! : ownerName;
       const ownerRegex = new RegExp(
-        `(?:part\\s+def|part|package|state|requirement)\\s+${ownerName}\\b[^{]*\\{`,
+        `(?:part\\s+def|part|package|state|requirement)\\s+${targetOwner}\\b[^{]*\\{`,
         "m",
       );
       const match = ownerRegex.exec(source);
@@ -133,8 +134,9 @@ export class SemanticEditor {
     }
 
     if (ownerName) {
+      const targetOwner = ownerName.includes("::") ? ownerName.split("::").pop()! : ownerName;
       const ownerRegex = new RegExp(
-        `(?:part\\s+def|part|package)\\s+${ownerName}\\b[^{]*\\{`,
+        `(?:part\\s+def|part|package)\\s+${targetOwner}\\b[^{]*\\{`,
         "m",
       );
       const match = ownerRegex.exec(source);
@@ -193,29 +195,49 @@ export class SemanticEditor {
       return "";
     });
 
-    // Remove element definition or block
-    // Match: `kind def? name { ... }` or `kind def? name ... ;`
-    const blockRegex = new RegExp(
-      `^[ \\t]*(?:package|part\\s+def|part|port\\s+def|port|state|action|requirement)\\s+${elementName}\\b[^{;]*\\{[\\s\\S]*?\\}\\r?\\n?`,
-      "gm",
+    // Remove element definition or block using brace depth counting
+    const blockStartRegex = new RegExp(
+      `^[ \\t]*(?:package|part\\s+def|part|port\\s+def|port|state|action|requirement)\\s+${elementName}\\b[^{;]*\\{`,
+      "m",
     );
-    const lineRegex = new RegExp(
-      `^[ \\t]*(?:part\\s+def|part|port|state|action|requirement)\\s+${elementName}\\b[^;]*;\\r?\\n?`,
-      "gm",
-    );
-
+    const startMatch = blockStartRegex.exec(cleaned);
     let found = false;
-    if (blockRegex.test(cleaned)) {
-      cleaned = cleaned.replace(blockRegex, "");
-      found = true;
-    } else if (lineRegex.test(cleaned)) {
-      cleaned = cleaned.replace(lineRegex, "");
-      found = true;
+
+    if (startMatch) {
+      const startIndex = startMatch.index;
+      const openBraceIndex = cleaned.indexOf("{", startIndex);
+      if (openBraceIndex !== -1) {
+        let depth = 1;
+        let i = openBraceIndex + 1;
+        while (i < cleaned.length && depth > 0) {
+          const char = cleaned[i];
+          if (char === "{") depth++;
+          else if (char === "}") depth--;
+          i++;
+        }
+        if (depth === 0) {
+          if (cleaned[i] === "\r" && cleaned[i + 1] === "\n") i += 2;
+          else if (cleaned[i] === "\n") i += 1;
+          cleaned = cleaned.slice(0, startIndex) + cleaned.slice(i);
+          found = true;
+        }
+      }
+    }
+
+    if (!found) {
+      const lineRegex = new RegExp(
+        `^[ \\t]*(?:part\\s+def|part|port\\s+def|port|state|action|requirement)\\s+${elementName}\\b[^;]*;\\r?\\n?`,
+        "m",
+      );
+      if (lineRegex.test(cleaned)) {
+        cleaned = cleaned.replace(lineRegex, "");
+        found = true;
+      }
     }
 
     if (!found) {
       // Fallback matching any line declaring elementName
-      const fallback = new RegExp(`^[ \\t]*.*\\b${elementName}\\b.*;\\r?\\n?`, "gm");
+      const fallback = new RegExp(`^[ \\t]*.*\\b${elementName}\\b.*;\\r?\\n?`, "m");
       if (fallback.test(cleaned)) {
         cleaned = cleaned.replace(fallback, "");
         found = true;
@@ -248,7 +270,12 @@ export class SemanticEditor {
       const nodeName = vn?.name || cell.id;
 
       if (portId) {
-        // Find port name from port items or ID
+        // Prefer pure short port.name from data.viewNode.ports matching portId
+        const vnPort = vn?.ports?.find((p) => p.id === portId);
+        if (vnPort && vnPort.name) {
+          return [nodeName, vnPort.name];
+        }
+        // Fallback to port item attrs or portId
         const ports = cell.getPorts ? cell.getPorts() : [];
         const portItem = ports.find((p: any) => p.id === portId);
         const portName = portItem?.attrs?.portLabel?.text || portId;

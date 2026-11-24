@@ -63,6 +63,27 @@ export class LayoutSidecar {
     return new Map(this.memoryCache);
   }
 
+  public toRecord(): Record<string, NodeLayoutPosition> {
+    const res: Record<string, NodeLayoutPosition> = {};
+    for (const [k, v] of this.memoryCache.entries()) {
+      res[k] = v;
+    }
+    return res;
+  }
+
+  public restoreRecord(data: Record<string, Partial<NodeLayoutPosition> & { x: number; y: number }>): void {
+    for (const [k, v] of Object.entries(data)) {
+      this.memoryCache.set(k, {
+        x: v.x,
+        y: v.y,
+        width: v.width || 180,
+        height: v.height || 60,
+        userMoved: v.userMoved ?? true,
+      });
+    }
+    this.saveToStorage();
+  }
+
   public clear(): void {
     this.memoryCache.clear();
     if (typeof localStorage !== "undefined") {

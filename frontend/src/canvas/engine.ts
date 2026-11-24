@@ -1,5 +1,5 @@
 import { Graph, Node, Edge } from "@antv/x6/es";
-import { Snapline, History, MiniMap } from "@antv/x6/es/plugin";
+import { Snapline, History, MiniMap, Selection, Transform } from "@antv/x6/es/plugin";
 import type {
   SysMLViewIR,
   SysMLViewNode,
@@ -23,6 +23,8 @@ import { CadBoxSelection } from "./selection";
 import { CadLayersPanel } from "./layers_panel";
 import { SysMLPalette, type InsertElementEvent } from "./palette";
 import { SemanticEditor } from "./semantic_editor";
+import { DxfExporter, DrawioExporter, JsonExporter, SvgExporter, ImageExporter, type DxfExportOptions } from "./exporters";
+import { CanvasImporter, type ImportResult } from "./importers";
 
 export interface CanvasEngineOptions {
   theme?: CanvasThemeId;
@@ -50,6 +52,10 @@ export class SysMLCanvasEngine {
   private sheetVisible = false;
   private orthoEnabled = true;
 
+  private getSourceCallback?: () => string;
+  private applySourceCallback?: (newSource: string, skipConfirm?: boolean) => void;
+  private showNoticeCallback?: (message: string) => void;
+
   // CAD Precision Modules
   public rulers?: CanvasRulers;
   public statusBar?: CadStatusBar;
@@ -60,6 +66,8 @@ export class SysMLCanvasEngine {
   public snaplinePlugin?: Snapline;
   public historyPlugin?: History;
   public miniMapPlugin?: MiniMap;
+  public selectionPlugin?: Selection;
+  public transformPlugin?: Transform;
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
     this.container = container;
@@ -68,6 +76,9 @@ export class SysMLCanvasEngine {
     this.sheetVisible = this.currentThemeStyles.isIso;
     this.onSelect = options.onSelect;
     this.sidecar = new LayoutSidecar(options.sessionKey || "default");
+    this.getSourceCallback = options.getSource;
+    this.applySourceCallback = options.applySource;
+    this.showNoticeCallback = options.showNotice;
 
     registerSysMLShapes();
 
@@ -81,6 +92,21 @@ export class SysMLCanvasEngine {
       graphMount.style.position = "relative";
       container.appendChild(graphMount);
     }
+
+    // Setup file drag-and-drop import onto canvas
+    graphMount.addEventListener("dragover", (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    });
+    graphMount.addEventListener("drop", (e) => {
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        e.preventDefault();
+        this.handleImportFile(files[0]);
+      }
+    });
 
     this.graph = new Graph({
       container: graphMount,
@@ -150,6 +176,31 @@ export class SysMLCanvasEngine {
       this.graph.use(this.historyPlugin);
     } catch (e) {
       console.warn("History plugin init warning:", e);
+    }
+
+    try {
+      this.selectionPlugin = new Selection({
+        enabled: true,
+        multiple: true,
+        showNodeSelectionBox: true,
+        movable: true,
+      });
+      this.graph.use(this.selectionPlugin);
+    } catch (e) {
+      console.warn("Selection plugin init warning:", e);
+    }
+
+    try {
+      this.transformPlugin = new Transform({
+        resizing: {
+          enabled: true,
+          minWidth: 40,
+          minHeight: 30,
+        },
+      });
+      this.graph.use(this.transformPlugin);
+    } catch (e) {
+      console.warn("Transform plugin init warning:", e);
     }
 
     // MiniMap mount
@@ -363,12 +414,9 @@ export class SysMLCanvasEngine {
       }
     });
 
-    // Realtime cursor world coordinate tracking
+    // Realtime cursor world coordinate tracking (clientToLocal accepts clientX, clientY directly)
     this.onPointerMoveHandler = (e: PointerEvent) => {
-      const rect = this.container.getBoundingClientRect();
-      const clientX = e.clientX - rect.left;
-      const clientY = e.clientY - rect.top;
-      const localPos = this.graph.clientToLocal(clientX, clientY);
+      const localPos = this.graph.clientToLocal(e.clientX, e.clientY);
       this.statusBar?.setCoordinates(localPos.x, localPos.y);
     };
     this.container.addEventListener("pointermove", this.onPointerMoveHandler);
@@ -849,6 +897,101 @@ export class SysMLCanvasEngine {
     }
   }
 
+  // --- Milestone R3: Exporters & Importers Integration ---
+
+  public getCurrentPositions(): Map<string, { x: number; y: number; width: number; height: number }> {
+    const map = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const node of this.graph.getNodes()) {
+      const pos = node.getPosition();
+      const size = node.getSize();
+      map.set(node.id, { x: pos.x, y: pos.y, width: size.width, height: size.height });
+    }
+    return map;
+  }
+
+  public exportDxf(options?: DxfExportOptions): string {
+    if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
+    return DxfExporter.export(this.currentViewIR, {
+      includeFrame: options?.includeFrame ?? this.sheetVisible,
+      scale: options?.scale,
+      nodePositions: this.getCurrentPositions(),
+    });
+  }
+
+  public exportDrawio(): string {
+    if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
+    const src = this.getSourceCallback?.() || "";
+    return DrawioExporter.export(this.currentViewIR, {
+      sysmlSource: src,
+      nodePositions: this.getCurrentPositions(),
+    });
+  }
+
+  public exportWorkbenchJson(): string {
+    if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
+    const src = this.getSourceCallback?.() || "";
+    return JsonExporter.exportProject(this.currentViewIR, src, {
+      activeTheme: this.themeId,
+      sidecarPositions: this.sidecar.toRecord(),
+    });
+  }
+
+  public exportSvg(): string {
+    if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
+    const svgEl = this.graph.container.querySelector("svg");
+    if (!svgEl) throw new Error("未找到画布对应的 SVG 矢量渲染图元");
+    const src = this.getSourceCallback?.() || "";
+    return SvgExporter.export(svgEl, this.currentViewIR, {
+      sysmlSource: src,
+      theme: this.themeId,
+      sidecarPositions: this.sidecar.toRecord(),
+    });
+  }
+
+  public async exportPngBlob(
+    scale: 1 | 2 | 4 = 2,
+    bg: "white" | "transparent" | "blueprint" = "blueprint",
+  ): Promise<Blob> {
+    const svgStr = this.exportSvg();
+    const area = this.graph.getContentArea();
+    const w = Math.max(800, area.width + 120);
+    const h = Math.max(600, area.height + 120);
+    return ImageExporter.exportPngBlob(svgStr, w, h, { scale, background: bg });
+  }
+
+  public async handleImportFile(file: File): Promise<ImportResult> {
+    const result = await CanvasImporter.importFile(file);
+    if (result.kind === "sysml") {
+      this.applySourceCallback?.(result.source, true);
+      this.showNoticeCallback?.(`已导入 SysML 源码文件: ${file.name}`);
+    } else if (result.kind === "workbench") {
+      this.sidecar.restoreRecord(result.project.sidecarPositions || {});
+      if (result.project.activeTheme) {
+        this.setTheme(result.project.activeTheme as CanvasThemeId);
+      }
+      this.applySourceCallback?.(result.project.sysmlSource, true);
+      this.showNoticeCallback?.(`已成功恢复工作台工程包: ${file.name}`);
+    } else if (result.kind === "drawio") {
+      if (result.result.hasMetadata) {
+        for (const [id, pos] of result.result.updatedPositions.entries()) {
+          this.sidecar.set(
+            id,
+            { x: pos.x, y: pos.y, width: pos.width || 180, height: pos.height || 60, userMoved: true },
+            this.currentViewIR?.viewType,
+          );
+        }
+        this.applySourceCallback?.(result.result.sysmlSource, true);
+        this.showNoticeCallback?.(`已载入 Draw.io 框图并同步位置坐标: ${file.name}`);
+      } else {
+        this.applySourceCallback?.(result.result.sysmlSource, true);
+        this.showNoticeCallback?.(`已从手绘 Draw.io 图解逆向生成 SysML 初始骨架代码: ${file.name}`);
+      }
+    } else if (result.kind === "unknown") {
+      this.showNoticeCallback?.(result.error);
+    }
+    return result;
+  }
+
   public destroy(): void {
     window.removeEventListener("keydown", this.onKeyDownHandler);
     window.removeEventListener("keyup", this.onKeyUpHandler);
@@ -863,6 +1006,8 @@ export class SysMLCanvasEngine {
     this.snaplinePlugin?.dispose();
     this.historyPlugin?.dispose();
     this.miniMapPlugin?.dispose();
+    this.selectionPlugin?.dispose();
+    this.transformPlugin?.dispose();
 
     if (this.sheetFrameEl) this.sheetFrameEl.remove();
     this.graph.dispose();

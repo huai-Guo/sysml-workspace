@@ -242,3 +242,50 @@ test("SemanticEditor compileDelete cleans up target and referencing connections 
   assert.ok(res.newSource.includes("part battery;"), "Unrelated element must remain");
   assert.ok(res.reasons.length >= 2, "Reasons should list removed referencing connections");
 });
+
+test("SemanticEditor compileDelete cleans up deeply nested block without leaving orphan braces", () => {
+  const source = `package TestPkg {
+    part def Vehicle {
+        part engine {
+            port fuelIn;
+        }
+        part transmission;
+    }
+    part other;
+}
+`;
+
+  const editor = new SemanticEditor({
+    getSource: () => source,
+    applySource: () => {},
+  });
+
+  const res = editor.compileDelete(source, "Vehicle");
+  assert.equal(res.safe, true);
+  assert.ok(!res.newSource.includes("part def Vehicle"));
+  assert.ok(!res.newSource.includes("part engine"));
+  assert.ok(!res.newSource.includes("part transmission"));
+  assert.ok(res.newSource.includes("part other;"));
+
+  // Check balanced curly braces in resulting source
+  const openBraces = (res.newSource.match(/\{/g) || []).length;
+  const closeBraces = (res.newSource.match(/\}/g) || []).length;
+  assert.equal(openBraces, closeBraces, "All curly braces must be balanced after deletion");
+});
+
+test("SemanticEditor compileElement and compileConnection resolve ownerName with '::' namespace", () => {
+  const source = `package MyPkg {
+    part def Vehicle {
+    }
+}
+`;
+
+  const editor = new SemanticEditor({
+    getSource: () => source,
+    applySource: () => {},
+  });
+
+  const res = editor.compileElement(source, "part", "wheel", "MyPkg::Vehicle");
+  assert.ok(res.includes("part wheel;"));
+  assert.ok(res.indexOf("part wheel;") > res.indexOf("part def Vehicle"));
+});
