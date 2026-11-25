@@ -58,7 +58,10 @@ export class Results {
     private api: ApiClient,
     private fail: (e: unknown) => void,
     private apply: (code: string, skipConfirm?: boolean) => void,
-    private jumpToSource?: (location: { offset?: number; line?: number; column?: number }) => void,
+    private jumpToSource?: (
+      location: { offset?: number; line?: number; column?: number },
+      switchTab?: boolean,
+    ) => void,
     private getSource?: () => string,
     private applyAndRender?: (code: string) => void,
   ) {
@@ -111,7 +114,8 @@ export class Results {
       try {
         this.canvasEngine = new SysMLCanvasEngine(canvasContainer, {
           onSelect: (loc) => {
-            if (loc) this.jumpToSource?.(loc);
+            // Highlight source line if editor is split-visible, NEVER yank user away from Diagram tab!
+            if (loc) this.jumpToSource?.(loc, false);
           },
           getSource: () => this.getSource?.() || this.current?.result?.sysml_source || "",
           applySource: (newSource, skipConfirm) => {
@@ -703,7 +707,7 @@ export class Results {
   }
   private go(location: { offset?: number; line?: number; column?: number }) {
     if (this.jumpToSource) {
-      this.jumpToSource(location);
+      this.jumpToSource(location, true);
     } else {
       this.tab("code");
       this.resultEditor.go(location);

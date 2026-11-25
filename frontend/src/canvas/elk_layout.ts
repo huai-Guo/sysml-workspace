@@ -50,11 +50,11 @@ export function estimateNodeDimensions(
     });
   }
 
-  const compHeight = totalLines > 0 ? totalLines * 17 + 14 : 0;
+  const compHeight = totalLines > 0 ? totalLines * 18 + 20 : 0;
 
   // Header height is 40px; topPadding reserves cavity clearance below header + parent compartments
   const topPadding = Math.max(58, 44 + compHeight + (totalLines > 0 ? 18 : 14));
-  let height = 42 + compHeight;
+  let height = 44 + compHeight;
 
   // Ensure vertical breathing room per side so port squares & labels above wires never collide
   if (node.ports && node.ports.length > 0) {
@@ -184,10 +184,10 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
             "elk.algorithm": "layered",
             "elk.direction": "RIGHT",
             "elk.portConstraints": "FIXED_SIDE",
-            "elk.padding": `[top=${topPadding},left=${leftPad},bottom=32,right=${rightPad}]`,
-            "elk.spacing.nodeNode": "42",
-            "elk.layered.spacing.nodeNodeBetweenLayers": "96",
-            "elk.spacing.portPort": "22",
+            "elk.padding": `[top=${topPadding},left=${leftPad},bottom=34,right=${rightPad}]`,
+            "elk.spacing.nodeNode": "46",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "138",
+            "elk.spacing.portPort": "24",
             "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
           }
         : {

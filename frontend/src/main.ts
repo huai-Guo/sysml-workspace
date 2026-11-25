@@ -62,8 +62,10 @@ const results = new Results(
   api,
   fail,
   (source, skipConfirm) => void applySource(source, skipConfirm),
-  (loc) => {
-    layoutManager.focusEditor();
+  (loc, switchTab) => {
+    if (switchTab) {
+      layoutManager.focusEditor();
+    }
     sourceEditor.go(loc);
   },
   () => sourceEditor.value,

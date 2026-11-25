@@ -3258,14 +3258,16 @@ dialog::backdrop {
    ========================================================================== */
 
 .pane-toolbar {
+  height: auto;
   min-height: 38px;
-  padding: 4px 10px;
+  padding: 5px 10px;
   background: var(--bg-card-header);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px 8px;
+  flex-wrap: wrap;
   flex-shrink: 0;
   position: relative;
   z-index: 90;

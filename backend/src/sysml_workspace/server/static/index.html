@@ -264,28 +264,28 @@
                       </button>
                       <div id="layers-menu-popover" class="canvas-layers-popover" hidden></div>
                     </div>
-                    <button id="reset-layout" class="tb-btn" type="button" title="清除手动拖拽位置并重新自动排版">自动排版</button>
+                    <button id="reset-layout" class="tb-btn" type="button" title="清除手动拖拽位置并重新自动排版">重排</button>
                     <select id="canvas-theme-select" class="tb-select" title="画布配色风格" aria-label="画布配色风格">
                       <option value="auto">跟随主题</option>
                       <option value="cad-blueprint">深色蓝图</option>
                       <option value="syson-clean">清爽亮色</option>
                       <option value="iso-drafting">黑白线框</option>
                     </select>
-                    <button id="btn-import-diagram" class="tb-btn" type="button" title="导入 .sysml / .drawio / .json / .svg">导入</button>
                     <input id="diagram-file-input" type="file" accept=".sysml,.kerml,.drawio,.xml,.json,.svg" hidden>
                     <div class="dropdown-wrap" id="export-dropdown-wrap">
-                      <button id="btn-export-menu" class="tb-btn" type="button" title="导出架构图或代码">
-                        <span>导出</span>
+                      <button id="btn-export-menu" class="tb-btn" type="button" title="导入或导出架构图与工程文件">
+                        <span>导入/导出</span>
                         <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M2.5 4.5L6 8l3.5-3.5H2.5z"/></svg>
                       </button>
                       <div id="export-menu-popover" class="export-menu-popover" hidden>
-                        <button class="export-menu-item" type="button" data-export="png-2x">高清图片 (.png 2x)</button>
-                        <button class="export-menu-item" type="button" data-export="png-4x">论文印刷图 (.png 4x)</button>
-                        <button class="export-menu-item" type="button" data-export="svg">矢量图 (.svg)</button>
-                        <button class="export-menu-item" type="button" data-export="drawio">Draw.io 可编辑图 (.drawio)</button>
+                        <button id="btn-import-diagram" class="export-menu-item" type="button">导入文件 (.sysml / .drawio / .json)</button>
                         <div class="export-menu-divider"></div>
-                        <button class="export-menu-item" type="button" data-export="json">完整工程包 (.sysmlwb.json)</button>
-                        <button class="export-menu-item" type="button" data-export="sysml">SysML 源码 (.sysml)</button>
+                        <button class="export-menu-item" type="button" data-export="png-2x">导出高清图 (.png 2x)</button>
+                        <button class="export-menu-item" type="button" data-export="png-4x">导出印刷图 (.png 4x)</button>
+                        <button class="export-menu-item" type="button" data-export="svg">导出矢量图 (.svg)</button>
+                        <button class="export-menu-item" type="button" data-export="drawio">导出 Draw.io (.drawio)</button>
+                        <button class="export-menu-item" type="button" data-export="json">导出工程包 (.sysmlwb.json)</button>
+                        <button class="export-menu-item" type="button" data-export="sysml">导出源码 (.sysml)</button>
                       </div>
                     </div>
                     <button data-download="diagram.svg" hidden disabled>下载 SVG</button>

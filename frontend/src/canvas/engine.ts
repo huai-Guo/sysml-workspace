@@ -1018,8 +1018,14 @@ export class SysMLCanvasEngine {
 
       const finalX = sidecarPos?.userMoved ? sidecarPos.x : elkPos.x;
       const finalY = sidecarPos?.userMoved ? sidecarPos.y : elkPos.y;
-      const finalWidth = sidecarPos?.userMoved && sidecarPos.width ? sidecarPos.width : elkPos.width;
-      const finalHeight = sidecarPos?.userMoved && sidecarPos.height ? sidecarPos.height : elkPos.height;
+      const finalWidth =
+        sidecarPos?.userMoved && sidecarPos.width
+          ? Math.max(sidecarPos.width, elkPos.width)
+          : elkPos.width;
+      const finalHeight =
+        sidecarPos?.userMoved && sidecarPos.height
+          ? Math.max(sidecarPos.height, elkPos.height)
+          : elkPos.height;
 
       const depth = this.calculateNodeDepth(node);
       const isCompound = this.isCompoundNode(node.id);
@@ -1167,7 +1173,7 @@ export class SysMLCanvasEngine {
               {
                 position: {
                   distance: 0.5,
-                  offset: -10,
+                  offset: 12,
                 },
                 attrs: {
                   text: {
