@@ -174,6 +174,43 @@ export class SysMLCanvasEngine {
       },
     });
 
+    // Guard against non-finite transform coordinate calculations during tab switching
+    const guardGraphViewMatrix = (g: any) => {
+      const v = g?.view;
+      if (v && typeof v.setMatrix === "function") {
+        const origSetMatrix = v.setMatrix.bind(v);
+        v.setMatrix = (m: any) => {
+          if (m) {
+            const keys = ["a", "b", "c", "d", "e", "f"];
+            for (let i = 0; i < keys.length; i++) {
+              const val = m[keys[i]];
+              if (val !== undefined && !Number.isFinite(val)) {
+                return;
+              }
+            }
+          }
+          return origSetMatrix(m);
+        };
+      }
+      const tf = g?.transform;
+      if (tf?.translate) {
+        const origTranslate = tf.translate.bind(tf);
+        tf.translate = (x: number, y: number) => {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          return origTranslate(x, y);
+        };
+      }
+      if (tf?.scale) {
+        const origScale = tf.scale.bind(tf);
+        tf.scale = (sx: number, sy: number, ox?: number, oy?: number) => {
+          if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+          return origScale(sx, sy, ox, oy);
+        };
+      }
+    };
+
+    guardGraphViewMatrix(this.graph);
+
     // 1. Initialize X6 Plugins
     try {
       this.snaplinePlugin = new Snapline({ enabled: true });
@@ -229,6 +266,26 @@ export class SysMLCanvasEngine {
         padding: 6,
       });
       this.graph.use(this.miniMapPlugin);
+
+      const mm = this.miniMapPlugin as any;
+      if (mm) {
+        guardGraphViewMatrix(mm.targetGraph);
+        if (mm.updatePaper) {
+          const origUpdatePaper = mm.updatePaper.bind(mm);
+          mm.updatePaper = (w: any, h: any) => {
+            const width = typeof w === "object" ? w.width : w;
+            const height = typeof w === "object" ? w.height : h;
+            if (!width || !height || width <= 0 || height <= 0 || !Number.isFinite(width) || !Number.isFinite(height)) {
+              return;
+            }
+            try {
+              return origUpdatePaper(w, h);
+            } catch {
+              // Guard against zero-dimension calculations during tab switching
+            }
+          };
+        }
+      }
     } catch (e) {
       console.warn("MiniMap plugin init warning:", e);
     }
@@ -373,10 +430,22 @@ export class SysMLCanvasEngine {
   private setupResizeObserver(): void {
     let resizeTimer: any;
     if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(() => {
+      this.resizeObserver = new ResizeObserver((entries) => {
         clearTimeout(resizeTimer);
+        const entry = entries[0];
+        if (entry && (entry.contentRect.width < 50 || entry.contentRect.height < 50)) {
+          return;
+        }
+        if (this.container.clientWidth < 50 || this.container.clientHeight < 50) {
+          return;
+        }
         resizeTimer = setTimeout(() => {
-          if (this.currentViewIR && this.hasRenderedView()) {
+          if (
+            this.container.clientWidth >= 50 &&
+            this.container.clientHeight >= 50 &&
+            this.currentViewIR &&
+            this.hasRenderedView()
+          ) {
             this.zoomFit();
           }
         }, 150);
@@ -1155,19 +1224,27 @@ export class SysMLCanvasEngine {
   }
 
   public zoomIn(): void {
+    if (this.container.clientWidth < 50 || this.container.clientHeight < 50) return;
     this.graph.zoom(0.2);
   }
 
   public zoomOut(): void {
+    if (this.container.clientWidth < 50 || this.container.clientHeight < 50) return;
     this.graph.zoom(-0.2);
   }
 
   public zoomReset(): void {
+    if (this.container.clientWidth < 50 || this.container.clientHeight < 50) return;
     this.graph.zoomTo(1.0);
   }
 
   public zoomFit(): void {
-    this.graph.zoomToFit({ padding: 36, maxScale: 1.5 });
+    if (this.container.clientWidth < 50 || this.container.clientHeight < 50) return;
+    try {
+      this.graph.zoomToFit({ padding: 36, maxScale: 1.5 });
+    } catch (e) {
+      console.warn("zoomFit warning:", e);
+    }
   }
 
   public resetLayout(): void {
