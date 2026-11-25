@@ -131,10 +131,9 @@ export function registerSysMLShapes(): void {
             ry: 0,
           },
           header: {
-            refX: 0.75,
-            refY: 0.75,
+            refX: 0,
+            refY: 0,
             refWidth: "100%",
-            refWidth2: -1.5,
             height: 39,
             fill: "#1a2434",
             stroke: "none",
