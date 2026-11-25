@@ -3204,3 +3204,50 @@ dialog::backdrop {
 .sysml-canvas-container[data-canvas-theme="iso-drafting"] .crumb-separator {
   color: #94a3b8;
 }
+
+/* X6 Selection & Transform Resizing Widget Styling */
+.x6-widget-selection {
+  pointer-events: none !important;
+}
+
+.x6-widget-selection-box {
+  pointer-events: none !important;
+  border: 1.5px dashed var(--accent-blue, #38bdf8) !important;
+  border-radius: 4px;
+}
+
+.x6-widget-transform {
+  pointer-events: none !important;
+}
+
+.x6-widget-transform-resize {
+  pointer-events: auto !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+  border: 2px solid #38bdf8 !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5) !important;
+  z-index: 100 !important;
+  cursor: pointer;
+}
+
+.x6-widget-transform-cursor-nw,
+.x6-widget-transform-cursor-se {
+  cursor: nwse-resize !important;
+}
+
+.x6-widget-transform-cursor-ne,
+.x6-widget-transform-cursor-sw {
+  cursor: nesw-resize !important;
+}
+
+.x6-widget-transform-cursor-n,
+.x6-widget-transform-cursor-s {
+  cursor: ns-resize !important;
+}
+
+.x6-widget-transform-cursor-e,
+.x6-widget-transform-cursor-w {
+  cursor: ew-resize !important;
+}

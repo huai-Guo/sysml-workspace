@@ -55,6 +55,8 @@ export class CadBoxSelection {
         target.closest(".x6-node") ||
         target.closest(".x6-port") ||
         target.closest(".x6-edge") ||
+        target.closest(".x6-widget-transform") ||
+        target.closest(".x6-widget-selection") ||
         target.closest(".cad-status-bar") ||
         target.closest(".cad-ruler-corner") ||
         target.closest(".cad-properties-panel") ||

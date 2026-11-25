@@ -242,8 +242,46 @@ export class SysMLCanvasEngine {
       this.transformPlugin = new Transform({
         resizing: {
           enabled: true,
-          minWidth: 80,
-          minHeight: 30,
+          minWidth: (node: Node) => {
+            if (node && this.isCompoundNode(node.id)) {
+              const children = this.graph.getNodes().filter((n) => {
+                const d = n.getData() as { viewNode?: SysMLViewNode } | undefined;
+                return d?.viewNode?.parentId === node.id && n.isVisible();
+              });
+              if (children.length > 0) {
+                let minX = Infinity;
+                let maxX = -Infinity;
+                for (const c of children) {
+                  const p = c.getPosition();
+                  const s = c.getSize();
+                  minX = Math.min(minX, p.x);
+                  maxX = Math.max(maxX, p.x + s.width);
+                }
+                return Math.max(200, maxX - minX + 270);
+              }
+            }
+            return 80;
+          },
+          minHeight: (node: Node) => {
+            if (node && this.isCompoundNode(node.id)) {
+              const children = this.graph.getNodes().filter((n) => {
+                const d = n.getData() as { viewNode?: SysMLViewNode } | undefined;
+                return d?.viewNode?.parentId === node.id && n.isVisible();
+              });
+              if (children.length > 0) {
+                let minY = Infinity;
+                let maxY = -Infinity;
+                for (const c of children) {
+                  const p = c.getPosition();
+                  const s = c.getSize();
+                  minY = Math.min(minY, p.y);
+                  maxY = Math.max(maxY, p.y + s.height);
+                }
+                return Math.max(100, maxY - minY + 100);
+              }
+            }
+            return 30;
+          },
         },
       });
       this.graph.use(this.transformPlugin);
@@ -438,6 +476,10 @@ export class SysMLCanvasEngine {
       this.handleChildNodeMovedOrResized(node);
     });
 
+    this.graph.on("node:resizing", ({ node }) => {
+      this.handleChildNodeMovedOrResized(node);
+    });
+
     this.graph.on("node:resized", ({ node }) => {
       const pos = node.getPosition();
       const size = node.getSize();
@@ -591,13 +633,18 @@ export class SysMLCanvasEngine {
     const padRight = 130;
     const padBottom = 35;
 
-    const desiredX = Math.min(parentPos.x, minX - padLeft);
-    const desiredY = Math.min(parentPos.y, minY - topPadding);
-    const desiredRight = Math.max(parentPos.x + parentSize.width, maxX + padRight);
-    const desiredBottom = Math.max(parentPos.y + parentSize.height, maxY + padBottom);
+    // Tight required envelope enclosing all children with padding
+    const fitX = minX - padLeft;
+    const fitY = minY - topPadding;
+    const fitRight = maxX + padRight;
+    const fitBottom = maxY + padBottom;
 
-    const newW = desiredRight - desiredX;
-    const newH = desiredBottom - desiredY;
+    // Dynamically adjust parent position and dimensions:
+    // Expands when children move outward, shrinks back when children move inward
+    const desiredX = fitX;
+    const desiredY = fitY;
+    const newW = Math.max(300, fitRight - desiredX);
+    const newH = Math.max(120, fitBottom - desiredY);
 
     if (desiredX !== parentPos.x || desiredY !== parentPos.y) {
       parentCell.setPosition(desiredX, desiredY, { deep: false });
@@ -605,6 +652,19 @@ export class SysMLCanvasEngine {
     if (newW !== parentSize.width || newH !== parentSize.height) {
       parentCell.setSize(newW, newH);
     }
+
+    // Persist updated bounds to sidecar so position is remembered
+    this.sidecar.set(
+      parentId,
+      {
+        x: desiredX,
+        y: desiredY,
+        width: newW,
+        height: newH,
+        userMoved: true,
+      },
+      this.currentViewIR?.viewType,
+    );
 
     // Recursively update grandparent
     const grandParentId = pViewNode?.parentId;
