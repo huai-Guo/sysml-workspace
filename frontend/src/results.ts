@@ -233,7 +233,7 @@ export class Results {
             const summary = optEl("diagram-summary");
             if (summary && this.current?.result?.diagram?.views?.[v]) {
               const s = this.current.result.diagram.views[v].summary;
-              summary.textContent = `${s.displayedNodes} 个节点 · ${s.displayedEdges} 条连线 · 视图: ${v}`;
+              summary.textContent = `${s.displayedNodes} 节点 · ${s.displayedEdges} 连线`;
             }
           }
         }
@@ -632,7 +632,7 @@ export class Results {
         const summary = result.diagram.view_ir.summary;
         const diagSumm = optEl("diagram-summary");
         if (diagSumm) {
-          diagSumm.textContent = `${summary.displayedNodes} 个节点 · ${summary.displayedEdges} 条连线 · 视图: ${result.diagram.view_ir.viewType}`;
+          diagSumm.textContent = `${summary.displayedNodes} 节点 · ${summary.displayedEdges} 连线`;
         }
 
         const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");

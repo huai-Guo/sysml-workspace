@@ -1,5 +1,5 @@
 import { Graph, Node, Edge } from "@antv/x6/es";
-import { Snapline, History, MiniMap, Selection, Transform } from "@antv/x6/es/plugin";
+import { Snapline, History, Selection, Transform } from "@antv/x6/es/plugin";
 import type {
   SysMLViewIR,
   SysMLViewNode,
@@ -59,7 +59,6 @@ export class SysMLCanvasEngine {
   public semanticEditor?: SemanticEditor;
   public snaplinePlugin?: Snapline;
   public historyPlugin?: History;
-  public miniMapPlugin?: MiniMap;
   public selectionPlugin?: Selection;
   public transformPlugin?: Transform;
 
@@ -81,6 +80,7 @@ export class SysMLCanvasEngine {
     }
   >();
   public drillPath: string[] = []; // Subsystem drill-down hierarchy
+  private renderToken = 0;
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
     this.container = container;
@@ -249,45 +249,6 @@ export class SysMLCanvasEngine {
       this.graph.use(this.transformPlugin);
     } catch (e) {
       console.warn("Transform plugin init warning:", e);
-    }
-
-    // MiniMap mount
-    try {
-      let minimapMount = container.querySelector<HTMLElement>(".cad-minimap-container");
-      if (!minimapMount) {
-        minimapMount = document.createElement("div");
-        minimapMount.className = "cad-minimap-container";
-        container.appendChild(minimapMount);
-      }
-      this.miniMapPlugin = new MiniMap({
-        container: minimapMount,
-        width: 140,
-        height: 90,
-        padding: 6,
-      });
-      this.graph.use(this.miniMapPlugin);
-
-      const mm = this.miniMapPlugin as any;
-      if (mm) {
-        guardGraphViewMatrix(mm.targetGraph);
-        if (mm.updatePaper) {
-          const origUpdatePaper = mm.updatePaper.bind(mm);
-          mm.updatePaper = (w: any, h: any) => {
-            const width = typeof w === "object" ? w.width : w;
-            const height = typeof w === "object" ? w.height : h;
-            if (!width || !height || width <= 0 || height <= 0 || !Number.isFinite(width) || !Number.isFinite(height)) {
-              return;
-            }
-            try {
-              return origUpdatePaper(w, h);
-            } catch {
-              // Guard against zero-dimension calculations during tab switching
-            }
-          };
-        }
-      }
-    } catch (e) {
-      console.warn("MiniMap plugin init warning:", e);
     }
 
     // 2. Initialize Selection & Popovers
@@ -512,49 +473,6 @@ export class SysMLCanvasEngine {
         return;
       }
 
-      // 3. Compartment fold button (▾ / ▸)
-      const isFoldBtn = selector === "foldBtn" || text === "▾" || text === "▸";
-      if (isFoldBtn) {
-        const data = node.getData() as
-          | { viewNode?: SysMLViewNode; sourceLocation?: SourceLocation }
-          | undefined;
-        if (data?.viewNode && data.viewNode.compartments?.length > 0) {
-          data.viewNode.collapsed = !data.viewNode.collapsed;
-          const newAttrs = buildNodeAttrs(data.viewNode, this.currentThemeStyles, {
-            depth: this.calculateNodeDepth(data.viewNode),
-            isCompound: this.isCompoundNode(data.viewNode.id),
-            isCollapsed: this.collapsedNodes.has(node.id),
-            lodTier: this.currentLODTier,
-            scale: this.currentScale,
-          });
-          node.setAttrs(newAttrs as any);
-
-          const curSize = node.getSize();
-          if (data.viewNode.collapsed) {
-            node.prop("expandedHeight", curSize.height);
-            node.setSize(curSize.width, 44);
-          } else {
-            const expH = Number(node.prop("expandedHeight")) || 120;
-            node.setSize(curSize.width, expH);
-          }
-
-          const updatedPos = node.getPosition();
-          const updatedSize = node.getSize();
-          this.sidecar.set(
-            node.id,
-            {
-              x: updatedPos.x,
-              y: updatedPos.y,
-              width: updatedSize.width,
-              height: updatedSize.height,
-              userMoved: true,
-            },
-            this.currentViewIR?.viewType,
-          );
-          return;
-        }
-      }
-
       // Highlight source in editor
       const data = node.getData() as { sourceLocation?: SourceLocation } | undefined;
       if (data && data.sourceLocation && this.onSelect) {
@@ -669,18 +587,20 @@ export class SysMLCanvasEngine {
       }
     }
     const topPadding = Math.max(56, 44 + compHeight + 20);
-    const pad = 28;
+    const padLeft = 140;
+    const padRight = 130;
+    const padBottom = 35;
 
-    const desiredX = Math.min(parentPos.x, minX - pad);
+    const desiredX = Math.min(parentPos.x, minX - padLeft);
     const desiredY = Math.min(parentPos.y, minY - topPadding);
-    const desiredRight = Math.max(parentPos.x + parentSize.width, maxX + pad);
-    const desiredBottom = Math.max(parentPos.y + parentSize.height, maxY + pad);
+    const desiredRight = Math.max(parentPos.x + parentSize.width, maxX + padRight);
+    const desiredBottom = Math.max(parentPos.y + parentSize.height, maxY + padBottom);
 
     const newW = desiredRight - desiredX;
     const newH = desiredBottom - desiredY;
 
     if (desiredX !== parentPos.x || desiredY !== parentPos.y) {
-      parentCell.setPosition(desiredX, desiredY);
+      parentCell.setPosition(desiredX, desiredY, { deep: false });
     }
     if (newW !== parentSize.width || newH !== parentSize.height) {
       parentCell.setSize(newW, newH);
@@ -978,7 +898,18 @@ export class SysMLCanvasEngine {
 
   private applyThemeStyles(): void {
     const theme = this.currentThemeStyles;
-    this.container.setAttribute("data-canvas-theme", this.themeId);
+    const resolvedThemeId =
+      this.themeId === "auto"
+        ? theme.name.includes("Blueprint")
+          ? "cad-blueprint"
+          : "syson-clean"
+        : this.themeId;
+    this.container.setAttribute("data-canvas-theme", resolvedThemeId);
+    this.container.style.backgroundColor = theme.canvasBg;
+    const mount = this.container.querySelector<HTMLElement>(".x6-graph-mount");
+    if (mount) {
+      mount.style.backgroundColor = theme.canvasBg;
+    }
 
     if (theme.gridColor && theme.gridColor !== "transparent") {
       this.graph.showGrid();
@@ -995,19 +926,30 @@ export class SysMLCanvasEngine {
     viewIR: SysMLViewIR,
     allViews?: Record<string, SysMLViewIR>,
   ): Promise<void> {
+    const token = ++this.renderToken;
     this.currentViewIR = viewIR;
     if (allViews) {
       this.allViews = allViews;
     }
 
     this.layersPanel?.setViewType(viewIR.viewType);
-    this.graph.clearCells();
     this.drillPath = [];
     this.collapsedEdgeEndpoints.clear();
     this.renderBreadcrumbs();
 
     // 1. Run ELK layout
     const elkResult = await runElkLayout(viewIR);
+
+    if (token !== this.renderToken) {
+      return;
+    }
+
+    this.graph.clearCells();
+    const stageG = this.container.querySelector(".x6-graph-svg-stage");
+    if (stageG) {
+      const zombieCells = stageG.querySelectorAll(".x6-cell");
+      zombieCells.forEach((z) => z.remove());
+    }
 
     const theme = this.currentThemeStyles;
     const nodeCells = new Map<string, Node>();
@@ -1027,8 +969,8 @@ export class SysMLCanvasEngine {
 
       const finalX = sidecarPos?.userMoved ? sidecarPos.x : elkPos.x;
       const finalY = sidecarPos?.userMoved ? sidecarPos.y : elkPos.y;
-      const finalWidth = sidecarPos?.width || elkPos.width;
-      const finalHeight = sidecarPos?.height || elkPos.height;
+      const finalWidth = sidecarPos?.userMoved && sidecarPos.width ? sidecarPos.width : elkPos.width;
+      const finalHeight = sidecarPos?.userMoved && sidecarPos.height ? sidecarPos.height : elkPos.height;
 
       const depth = this.calculateNodeDepth(node);
       const isCompound = this.isCompoundNode(node.id);
@@ -1091,6 +1033,13 @@ export class SysMLCanvasEngine {
       }
     }
 
+    // Auto-fit parent bounds to contain all children and their port labels
+    for (const node of viewIR.nodes) {
+      if (this.isCompoundNode(node.id)) {
+        this.updateParentBounds(node.id);
+      }
+    }
+
     // 4. Instantiate and add edges
     for (const edge of viewIR.edges || []) {
       if (!nodeCells.has(edge.sourceId) || !nodeCells.has(edge.targetId)) {
@@ -1111,19 +1060,15 @@ export class SysMLCanvasEngine {
         router: this.orthoEnabled
           ? {
               name: "manhattan",
-              args: { padding: 12, step: 10 },
+              args: { padding: 16, step: 10 },
             }
           : {
               name: "normal",
             },
         connector: {
-          name: "jumpover",
-          args: { type: "arc", size: 6 },
+          name: "rounded",
+          args: { radius: 6 },
         },
-        tools: [
-          { name: "vertices" },
-          { name: "segments" },
-        ],
         attrs: edgeAttrs,
         labels: edge.label
           ? [
@@ -1367,7 +1312,6 @@ export class SysMLCanvasEngine {
     this.semanticEditor?.dispose();
     this.snaplinePlugin?.dispose();
     this.historyPlugin?.dispose();
-    this.miniMapPlugin?.dispose();
     this.selectionPlugin?.dispose();
     this.transformPlugin?.dispose();
 

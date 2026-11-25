@@ -14,17 +14,22 @@ class Ref(BaseModel):
 
 
 class Entity(BaseModel):
+    model_config = ConfigDict(extra="allow")
     id: str = Field(min_length=1, max_length=256)
     kind: str = Field(min_length=1, max_length=128)
     name: str | None = Field(default=None, max_length=4000)
     qualified_name: str | None = Field(default=None, max_length=8000)
     owner_id: str | None = Field(default=None, max_length=256)
+    types: list[Ref] = Field(default_factory=list, max_length=128)
+    direction: str | None = Field(default=None, max_length=32)
     chaining_features: list[Ref] = Field(default_factory=list, max_length=128)
 
 
 class Relation(BaseModel):
+    model_config = ConfigDict(extra="allow")
     id: str = Field(min_length=1, max_length=256)
     kind: str = Field(min_length=1, max_length=128)
+    name: str | None = Field(default=None, max_length=4000)
     source: Ref
     target: Ref
 

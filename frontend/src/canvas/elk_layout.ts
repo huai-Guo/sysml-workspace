@@ -90,8 +90,9 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
       height,
       layoutOptions: isCompound
         ? {
-            "elk.padding": `[top=${topPadding},left=30,bottom=30,right=30]`,
-            "elk.spacing.nodeNode": "40",
+            "elk.padding": `[top=${topPadding},left=140,bottom=35,right=130]`,
+            "elk.spacing.nodeNode": "60",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "160",
             "elk.direction": "RIGHT",
           }
         : {
@@ -144,8 +145,8 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": "RIGHT",
-      "elk.spacing.nodeNode": "45",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "65",
+      "elk.spacing.nodeNode": "50",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "90",
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       "elk.padding": "[top=40,left=40,bottom=40,right=40]",

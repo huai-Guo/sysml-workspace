@@ -127,11 +127,12 @@ export const THEMES: Record<"cad-blueprint" | "syson-clean" | "iso-drafting", Th
 export function resolveTheme(themeId: CanvasThemeId): ThemeStyles {
   if (themeId === "auto") {
     if (typeof document !== "undefined") {
-      const isDark =
-        document.body?.classList.contains("dark") ||
-        document.documentElement?.getAttribute("data-theme") === "dark" ||
-        (typeof window !== "undefined" &&
-          window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+      const dataTheme = document.documentElement?.getAttribute("data-theme");
+      const isDark = dataTheme
+        ? dataTheme !== "light"
+        : (document.body?.classList.contains("dark") ||
+           (typeof window !== "undefined" &&
+             window.matchMedia?.("(prefers-color-scheme: dark)").matches));
       return isDark ? THEMES["cad-blueprint"] : THEMES["syson-clean"];
     }
     return THEMES["cad-blueprint"];

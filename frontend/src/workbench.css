@@ -1099,6 +1099,14 @@ body.is-tab-dragging .pane-body {
   padding: 0 10px;
   font-size: 11.5px;
   color: var(--text-secondary);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+#diagram-summary {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
 }
 
 .diagram-toolbar-left {
@@ -2781,6 +2789,7 @@ dialog::backdrop {
 }
 
 .cad-minimap-container {
+  display: none !important;
   background: var(--bg-card, #131b26);
   border: 1px solid var(--border-subtle, #273549);
   border-radius: 4px;
@@ -3143,4 +3152,55 @@ dialog::backdrop {
 .crumb-separator {
   color: var(--text-muted, #64748b);
   font-size: 10px;
+}
+
+/* Light & Paper Theme Adaptation for Floating Overlays */
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .canvas-zoom-capsule,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .canvas-zoom-capsule,
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .canvas-breadcrumbs,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .canvas-breadcrumbs {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .zoom-cap-btn,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .zoom-cap-btn {
+  color: #475569;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .zoom-cap-btn:hover,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .zoom-cap-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .zoom-cap-text,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .zoom-cap-text {
+  color: #0f172a;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .zoom-cap-btn.fit,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .zoom-cap-btn.fit {
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .crumb-item,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .crumb-item {
+  color: #64748b;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .crumb-item:hover,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .crumb-item:hover {
+  color: #0284c7;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .crumb-item.active,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .crumb-item.active {
+  color: #0f172a;
+}
+
+.sysml-canvas-container[data-canvas-theme="syson-clean"] .crumb-separator,
+.sysml-canvas-container[data-canvas-theme="iso-drafting"] .crumb-separator {
+  color: #94a3b8;
 }

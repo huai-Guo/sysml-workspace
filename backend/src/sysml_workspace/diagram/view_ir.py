@@ -190,6 +190,15 @@ class ViewProjectionEngine:
         for e in raw_entities:
             self.children.setdefault(e.get("owner_id"), []).append(e)
 
+        # Build feature chaining index: chained_endpoint_id -> [target_entity_ids]
+        self.chains: dict[str, list[str]] = {}
+        for r in self.relations:
+            if r.get("kind") == "FeatureChaining":
+                src = r.get("source", {}).get("id")
+                tgt = r.get("target", {}).get("id")
+                if src and tgt:
+                    self.chains.setdefault(src, []).append(tgt)
+
         # Detect root package name
         self.root_package_name = self._find_root_package_name()
 
@@ -245,6 +254,16 @@ class ViewProjectionEngine:
             for c in self.children.get(entity["id"], [])
             if "Port" in c.get("kind", "") and c.get("name")
         ]
+        # If part usage has no direct ports, inherit from its definition type(s)
+        if not port_children and entity.get("kind") in {"PartUsage", "ItemUsage"}:
+            for t in entity.get("types", []):
+                t_id = t.get("id")
+                if t_id and t_id in self.entities:
+                    def_entity = self.entities[t_id]
+                    for c in self.children.get(def_entity["id"], []):
+                        if "Port" in c.get("kind", "") and c.get("name"):
+                            port_children.append(c)
+
         for idx, child in enumerate(port_children):
             direction = child.get("direction")
             type_label = self._extract_type_label(child)
@@ -265,7 +284,7 @@ class ViewProjectionEngine:
             loc = child.get("location")
             line = loc.get("line") if isinstance(loc, dict) else None
 
-            port_id = child.get("qualified_name") or f"{self._node_anchor_id(entity)}.{child['name']}"
+            port_id = f"{self._node_anchor_id(entity)}.{child['name']}"
             ports.append(
                 SysMLPort(
                     id=port_id,
@@ -278,6 +297,47 @@ class ViewProjectionEngine:
                 )
             )
         return ports
+
+    def _resolve_connection_endpoint(
+        self,
+        ep_id: str | None,
+        semantic_to_anchor: dict[str, str],
+        port_to_owner: dict[str, str],
+        semantic_to_port_id: dict[str, str],
+    ) -> tuple[str | None, str | None]:
+        if not ep_id:
+            return None, None
+        if ep_id in semantic_to_anchor:
+            return semantic_to_anchor[ep_id], None
+        if ep_id in port_to_owner:
+            return port_to_owner[ep_id], semantic_to_port_id.get(ep_id)
+        chained = self.chains.get(ep_id, [])
+        if chained:
+            part_id = next(
+                (
+                    c
+                    for c in chained
+                    if "Part" in self.entities.get(c, {}).get("kind", "")
+                    or "Item" in self.entities.get(c, {}).get("kind", "")
+                ),
+                None,
+            )
+            port_ent_id = next(
+                (
+                    c
+                    for c in chained
+                    if "Port" in self.entities.get(c, {}).get("kind", "")
+                ),
+                None,
+            )
+            node_anchor = semantic_to_anchor.get(part_id) if part_id else None
+            port_name = self.entities.get(port_ent_id, {}).get("name") if port_ent_id else None
+            if node_anchor and port_name:
+                resolved_port = f"{node_anchor}.{port_name}"
+                return node_anchor, resolved_port
+            if node_anchor:
+                return node_anchor, None
+        return None, None
 
     def _build_compartments(
         self, entity: dict[str, Any], include_ports: bool = False
@@ -402,22 +462,52 @@ class ViewProjectionEngine:
         edges: list[SysMLViewEdge] = []
         node_id_set: set[str] = set()
         semantic_to_anchor: dict[str, str] = {}
+        port_to_owner: dict[str, str] = {}
+        semantic_to_port_id: dict[str, str] = {}
 
-        # Elements to include as explicit diagram boxes:
-        # Package, PartDefinition, ItemDefinition, PortDefinition, ActionDefinition,
-        # StateDefinition, RequirementDefinition, ConstraintDefinition, InterfaceDefinition,
-        # and PartUsage (top or 1st/2nd level).
+        # Detect top-level package(s) (either with no owner, or owned by an anonymous root Namespace)
+        top_package_ids = {
+            e["id"]
+            for e in self.entities.values()
+            if e.get("kind") in {"Package", "LibraryPackage"}
+            and (
+                not e.get("owner_id")
+                or (
+                    e["owner_id"] in self.entities
+                    and not self.entities[e["owner_id"]].get("name")
+                )
+            )
+        }
+
         candidate_entities: list[dict[str, Any]] = []
         for e in self.entities.values():
             if not e.get("name"):
                 continue
             kind = e.get("kind", "")
-            # Skip port usages and attribute usages from being top-level nodes in General view;
-            # they are rendered inside compartments.
-            if kind in {"PortUsage", "AttributeUsage", "Doc", "Comment"}:
+            # Skip connections, ports, attributes, docs, and comments from being node boxes
+            if (
+                kind in {
+                    "PortUsage",
+                    "AttributeUsage",
+                    "Doc",
+                    "Comment",
+                    "ConnectionUsage",
+                    "FlowConnectionUsage",
+                    "BinaryConnectionUsage",
+                    "SuccessionAsUsage",
+                    "BindingConnectorAsUsage",
+                }
+                or "Connection" in kind
+                or "Connector" in kind
+            ):
+                continue
+            # If this is the top-level root package of the entire model, it serves as the diagram frame,
+            # not an enclosed canvas box that swallows the entire viewport.
+            if e["id"] in top_package_ids:
                 continue
             candidate_entities.append(e)
 
+        side_counter: dict[str, int] = {}
         for e in candidate_entities:
             anchor_id = self._node_anchor_id(e)
             node_id_set.add(anchor_id)
@@ -426,7 +516,7 @@ class ViewProjectionEngine:
             shape_cat = _classify_shape_category(e.get("kind", ""))
             parent_id = None
             raw_owner_id = e.get("owner_id")
-            if raw_owner_id and raw_owner_id in self.entities:
+            if raw_owner_id and raw_owner_id in self.entities and raw_owner_id not in top_package_ids:
                 owner = self.entities[raw_owner_id]
                 # Only nest if owner is also a candidate node
                 if owner.get("name") and owner.get("kind") not in {
@@ -434,6 +524,15 @@ class ViewProjectionEngine:
                     "AttributeUsage",
                 }:
                     parent_id = self._node_anchor_id(owner)
+
+            ports = self._extract_ports(e, side_counter)
+            for p in ports:
+                port_to_owner[p.id] = anchor_id
+                semantic_to_port_id[p.id] = p.id
+                for child in self.children.get(e["id"], []):
+                    if child.get("name") == p.name:
+                        port_to_owner[child["id"]] = anchor_id
+                        semantic_to_port_id[child["id"]] = p.id
 
             compartments = self._build_compartments(e, include_ports=True)
             node = SysMLViewNode(
@@ -448,26 +547,49 @@ class ViewProjectionEngine:
                 parentId=parent_id,
                 layer=_layer_for(shape_cat, e.get("kind", "")),
                 compartments=compartments,
-                ports=[],
+                ports=ports,
                 sourceLocation=self._extract_source_location(e),
             )
             nodes.append(node)
 
         # Edges for General view:
-        # Specialization, Subclassification, Satisfy, Verify, Dependency, ConnectionUsage
+        # Specialization, Subclassification, Satisfy, Verify, Dependency, and internal Connections
         for r in self.relations:
             r_kind = r.get("kind", "")
-            if r_kind == "ownership":
-                # Ownership is expressed via parentId container nesting, no cross-screen lines!
+            if r_kind in {"ownership", "FeatureTyping"}:
+                # Ownership is expressed via parentId container nesting.
+                # FeatureTyping is already expressed via type label (e.g. b : Battery).
+                continue
+
+            # Check if this is a connection / connector
+            if "Connection" in r_kind or "Connector" in r_kind or "Flow" in r_kind:
+                src_ref = r.get("source", {})
+                tgt_ref = r.get("target", {})
+                src_node_id, src_port_id = self._resolve_connection_endpoint(
+                    src_ref.get("id"), semantic_to_anchor, port_to_owner, semantic_to_port_id
+                )
+                tgt_node_id, tgt_port_id = self._resolve_connection_endpoint(
+                    tgt_ref.get("id"), semantic_to_anchor, port_to_owner, semantic_to_port_id
+                )
+                if src_node_id and tgt_node_id and src_node_id in node_id_set and tgt_node_id in node_id_set:
+                    edges.append(
+                        SysMLViewEdge(
+                            id=r.get("id") or f"conn-{len(edges)}",
+                            kind="flow" if "Flow" in r_kind else "connection",
+                            sourceId=src_node_id,
+                            sourcePortId=src_port_id,
+                            targetId=tgt_node_id,
+                            targetPortId=tgt_port_id,
+                            label=r.get("name"),
+                            layer="L4_Connections",
+                        )
+                    )
                 continue
 
             src_ref = r.get("source", {})
             tgt_ref = r.get("target", {})
-            src_sem_id = src_ref.get("id")
-            tgt_sem_id = tgt_ref.get("id")
-
-            src_node_id = semantic_to_anchor.get(src_sem_id)
-            tgt_node_id = semantic_to_anchor.get(tgt_sem_id)
+            src_node_id = semantic_to_anchor.get(src_ref.get("id"))
+            tgt_node_id = semantic_to_anchor.get(tgt_ref.get("id"))
 
             if not src_node_id or not tgt_node_id or src_node_id == tgt_node_id:
                 continue
@@ -499,9 +621,6 @@ class ViewProjectionEngine:
                 edge_kind = "verify"
                 label = "«verify»"
                 edge_layer = "L5_Requirements"
-            elif "Connection" in r_kind or "Connector" in r_kind:
-                edge_kind = "connection"
-                edge_layer = "L4_Connections"
             elif "Transition" in r_kind:
                 edge_kind = "transition"
                 edge_layer = "L3_Behavior"
@@ -548,13 +667,19 @@ class ViewProjectionEngine:
         part_entities = [
             e
             for e in self.entities.values()
-            if e.get("kind") in {"PartUsage", "ItemUsage"} and e.get("name")
+            if e.get("kind") in {"PartUsage", "ItemUsage"}
+            and "Connection" not in e.get("kind", "")
+            and "Connector" not in e.get("kind", "")
+            and e.get("name")
         ]
         if not part_entities:
             part_entities = [
                 e
                 for e in self.entities.values()
-                if e.get("kind") in {"PartDefinition", "ItemDefinition"} and e.get("name")
+                if e.get("kind") in {"PartDefinition", "ItemDefinition"}
+                and "Connection" not in e.get("kind", "")
+                and "Connector" not in e.get("kind", "")
+                and e.get("name")
             ]
 
         # Also find root container if any
@@ -599,6 +724,8 @@ class ViewProjectionEngine:
             )
             nodes.append(node)
 
+        node_id_set = {n.id for n in nodes}
+
         # Edges: connections and flows
         for r in self.relations:
             r_kind = r.get("kind", "")
@@ -610,15 +737,19 @@ class ViewProjectionEngine:
             src_id = src_ref.get("id")
             tgt_id = tgt_ref.get("id")
 
-            # Check if endpoints are ports or nodes
-            src_node_id = semantic_to_anchor.get(src_id) or port_to_owner.get(src_id)
-            tgt_node_id = semantic_to_anchor.get(tgt_id) or port_to_owner.get(tgt_id)
+            # Resolve endpoints using chained resolution
+            src_node_id, src_port_id = self._resolve_connection_endpoint(
+                src_id, semantic_to_anchor, port_to_owner, semantic_to_port_id
+            )
+            tgt_node_id, tgt_port_id = self._resolve_connection_endpoint(
+                tgt_id, semantic_to_anchor, port_to_owner, semantic_to_port_id
+            )
 
-            if not src_node_id or not tgt_node_id or src_node_id == tgt_node_id:
+            if not src_node_id or not tgt_node_id or (src_node_id == tgt_node_id and src_port_id == tgt_port_id):
                 continue
 
-            src_port_id = semantic_to_port_id.get(src_id)
-            tgt_port_id = semantic_to_port_id.get(tgt_id)
+            if src_node_id not in node_id_set or tgt_node_id not in node_id_set:
+                continue
 
             edges.append(
                 SysMLViewEdge(

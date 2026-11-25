@@ -42,10 +42,6 @@ export function registerSysMLShapes(): void {
           },
           {
             tagName: "text",
-            selector: "foldBtn",
-          },
-          {
-            tagName: "text",
             selector: "collapseBtn",
           },
           {
@@ -120,20 +116,6 @@ export function registerSysMLShapes(): void {
             fontFamily: "ui-monospace, monospace, sans-serif",
             fill: "#94a3b8",
             text: "",
-          },
-          foldBtn: {
-            ref: "header",
-            refX: "100%",
-            refX2: -16,
-            refY: 20,
-            textAnchor: "middle",
-            dominantBaseline: "central",
-            fontSize: 11,
-            fontFamily: "ui-monospace, monospace, sans-serif",
-            fill: "#94a3b8",
-            cursor: "pointer",
-            text: "▾",
-            display: "none",
           },
           collapseBtn: {
             ref: "header",
@@ -336,8 +318,8 @@ export function buildNodeAttrs(
   let rx = 0;
   let ry = 0;
   if (isUsage) {
-    rx = 8;
-    ry = 8;
+    rx = 4;
+    ry = 4;
   } else if (isState) {
     rx = 16;
     ry = 16;
@@ -391,7 +373,12 @@ export function buildNodeAttrs(
   const hasCompartments = compLines.length > 0;
 
   // Title with type label if present
-  const titleText = node.name + (node.typeLabel ? ` ${node.typeLabel}` : "");
+  const cleanTypeLabel = node.typeLabel
+    ? node.typeLabel.trim().startsWith(":")
+      ? node.typeLabel.trim()
+      : `: ${node.typeLabel.trim()}`
+    : "";
+  const titleText = node.name + (cleanTypeLabel ? ` ${cleanTypeLabel}` : "");
 
   // LOD compensations
   const lod = options.lodTier || "meso";
@@ -442,11 +429,6 @@ export function buildNodeAttrs(
       fill: theme.node.textSecondary,
       text: compartmentsText,
       display: hasCompartments && !node.collapsed && !isMacro && !isCollapsed ? "block" : "none",
-    },
-    foldBtn: {
-      fill: theme.node.textSecondary,
-      text: node.collapsed ? "▸" : "▾",
-      display: hasCompartments && !isCompound && !isMacro ? "block" : "none",
     },
     collapseBtn: {
       display: isCompound ? "block" : "none",

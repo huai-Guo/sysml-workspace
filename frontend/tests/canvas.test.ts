@@ -91,7 +91,7 @@ test("OMG standard shape attributes distinguish Definition, Usage, Package, Stat
     ports: [],
   };
   const usageAttrs = buildNodeAttrs(usageNode, theme) as any;
-  assert.equal(usageAttrs.body.rx, 8, "Usage should have rounded corners (rx: 8)");
+  assert.equal(usageAttrs.body.rx, 4, "Usage should have rounded corners (rx: 4)");
 
   const pkgNode: SysMLViewNode = {
     id: "pkg1",
