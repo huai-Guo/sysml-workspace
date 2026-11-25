@@ -7,6 +7,7 @@ export interface SemanticEditorOptions {
   getSource: () => string;
   applySource: (newSource: string, skipConfirm?: boolean) => void;
   showNotice?: (message: string) => void;
+  isExpandedCompound?: (nodeId: string) => boolean;
 }
 
 export class SemanticEditor {
@@ -14,6 +15,7 @@ export class SemanticEditor {
   private getSource: () => string;
   private applySource: (newSource: string, skipConfirm?: boolean) => void;
   private showNotice?: (message: string) => void;
+  private isExpandedCompound?: (nodeId: string) => boolean;
   private connectionCounter = 0;
   private inlineEditorEl?: HTMLInputElement;
 
@@ -21,6 +23,7 @@ export class SemanticEditor {
     this.getSource = options.getSource;
     this.applySource = options.applySource;
     this.showNotice = options.showNotice;
+    this.isExpandedCompound = options.isExpandedCompound;
   }
 
   public attachGraph(graph: Graph): void {
@@ -32,9 +35,12 @@ export class SemanticEditor {
       this.handleEdgeConnected(edge);
     });
 
-    // 2. Node double click for inline rename
+    // 2. Node double click for inline rename (suppressed on expanded compound containers)
     graph.on("node:dblclick", ({ node, e }) => {
       e.stopPropagation();
+      if (this.isExpandedCompound?.(node.id)) {
+        return;
+      }
       this.startInlineRename(node);
     });
   }

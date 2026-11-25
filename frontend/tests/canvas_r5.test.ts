@@ -191,3 +191,24 @@ test("R5.3: 3-Tier Semantic Zoom LOD scales font and compensates stroke in macro
   assert.ok(portText.includes("FluidPort"), "Micro view should show full port type signatures");
   assert.ok(portText.includes("airPort"), "Micro view should show port name");
 });
+
+test("R5.4: LOD port names are bidirectionally reversible between meso and micro", () => {
+  const theme = resolveTheme("cad-blueprint");
+  const node = compoundViewIR.nodes[0]; // has airPort, FluidPort, inout
+
+  const mesoPorts = buildPortItems(node, theme, { lodTier: "meso" });
+  const microPorts = buildPortItems(node, theme, { lodTier: "micro" });
+
+  const mesoText = (mesoPorts[0].attrs as Record<string, Record<string, unknown>>).text.text as string;
+  const microText = (microPorts[0].attrs as Record<string, Record<string, unknown>>).text.text as string;
+
+  assert.strictEqual(mesoText, "◆ airPort");
+  assert.strictEqual(microText, "◆ airPort: FluidPort");
+
+  // Re-evaluating meso returns exactly to clean short name
+  const mesoReverted = buildPortItems(node, theme, { lodTier: "meso" });
+  assert.strictEqual(
+    (mesoReverted[0].attrs as Record<string, Record<string, unknown>>).text.text,
+    "◆ airPort",
+  );
+});

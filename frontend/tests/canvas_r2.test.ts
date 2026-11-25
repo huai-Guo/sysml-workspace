@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SemanticEditor } from "../src/canvas/semantic_editor";
 
-test("CadStatusBar state and coordinate format verification", () => {
+test("Canvas coordinate formatting and zoom percentage calculations", () => {
   // Verify status bar state representation and mode switching
   const state = {
     grid: true,

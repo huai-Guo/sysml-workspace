@@ -72,6 +72,14 @@ export class SysMLCanvasEngine {
   public currentLODTier: "macro" | "meso" | "micro" = "meso";
   public collapsedNodes: Set<string> = new Set();
   private preCollapseSizes = new Map<string, { width: number; height: number }>();
+  private collapsedEdgeEndpoints = new Map<
+    string,
+    {
+      collapsedParentId: string;
+      originalSource: ReturnType<Edge["getSource"]>;
+      originalTarget: ReturnType<Edge["getTarget"]>;
+    }
+  >();
   public drillPath: string[] = []; // Subsystem drill-down hierarchy
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
@@ -119,7 +127,7 @@ export class SysMLCanvasEngine {
       },
       mousewheel: {
         enabled: true,
-        modifiers: ["ctrl", "meta"],
+        zoomAtMousePosition: true,
         minScale: 0.2,
         maxScale: 3.0,
       },
@@ -244,6 +252,8 @@ export class SysMLCanvasEngine {
         getSource: options.getSource,
         applySource: options.applySource,
         showNotice: options.showNotice,
+        isExpandedCompound: (nodeId: string) =>
+          this.isCompoundNode(nodeId) && !this.collapsedNodes.has(nodeId),
       });
       this.semanticEditor.attachGraph(this.graph);
     }
@@ -483,9 +493,9 @@ export class SysMLCanvasEngine {
       }
     });
 
-    // Double-click on compound container title triggers drill-down
+    // Double-click on compound container title triggers drill-down (only when expanded)
     this.graph.on("node:dblclick", ({ node }) => {
-      if (this.isCompoundNode(node.id)) {
+      if (this.isCompoundNode(node.id) && !this.collapsedNodes.has(node.id)) {
         this.drillDown(node.id);
       }
     });
@@ -619,6 +629,7 @@ export class SysMLCanvasEngine {
     if (!parentCell || !parentCell.isNode()) return;
 
     const descendantIds = this.getDescendantNodeIds(nodeId);
+    const descendantSet = new Set(descendantIds);
     const isNowCollapsed = !this.collapsedNodes.has(nodeId);
 
     if (isNowCollapsed) {
@@ -629,10 +640,37 @@ export class SysMLCanvasEngine {
       parentCell.setSize(Math.min(parentCell.getSize().width, 220), 44);
       parentCell.attr("collapseBtn/text", "[+]");
 
-      // Hide all descendant nodes and connected descendant edges
+      // Hide all descendant nodes
       for (const dId of descendantIds) {
         const dCell = this.graph.getCellById(dId);
         if (dCell) dCell.hide();
+      }
+
+      // Synchronously handle edges:
+      // - Both endpoints inside descendantIds: hide
+      // - One inside and one outside: record original endpoints and reroute to parentCell
+      for (const edge of this.graph.getEdges()) {
+        const srcId = edge.getSourceCellId();
+        const tgtId = edge.getTargetCellId();
+        const isSrcInside = descendantSet.has(srcId);
+        const isTgtInside = descendantSet.has(tgtId);
+
+        if (isSrcInside && isTgtInside) {
+          edge.hide();
+        } else if (isSrcInside || isTgtInside) {
+          this.collapsedEdgeEndpoints.set(edge.id, {
+            collapsedParentId: nodeId,
+            originalSource: { ...edge.getSource() },
+            originalTarget: { ...edge.getTarget() },
+          });
+          if (isSrcInside) {
+            edge.setSource({ cell: parentCell.id });
+          }
+          if (isTgtInside) {
+            edge.setTarget({ cell: parentCell.id });
+          }
+          edge.show();
+        }
       }
     } else {
       this.collapsedNodes.delete(nodeId);
@@ -647,6 +685,25 @@ export class SysMLCanvasEngine {
         const dCell = this.graph.getCellById(dId);
         if (dCell) dCell.show();
       }
+
+      // Restore edges:
+      // If edge was rerouted by this collapsed parent, restore original source and target
+      for (const edge of this.graph.getEdges()) {
+        const recorded = this.collapsedEdgeEndpoints.get(edge.id);
+        if (recorded && recorded.collapsedParentId === nodeId) {
+          edge.setSource(recorded.originalSource);
+          edge.setTarget(recorded.originalTarget);
+          edge.show();
+          this.collapsedEdgeEndpoints.delete(edge.id);
+        } else {
+          const srcId = edge.getSourceCellId();
+          const tgtId = edge.getTargetCellId();
+          if (descendantSet.has(srcId) && descendantSet.has(tgtId)) {
+            edge.show();
+          }
+        }
+      }
+
       this.updateParentBounds(nodeId);
     }
   }
@@ -784,15 +841,35 @@ export class SysMLCanvasEngine {
 
       // Port labels
       for (const port of vn.ports || []) {
+        const dirSymbol =
+          port.direction === "in"
+            ? "▶"
+            : port.direction === "out"
+              ? "◀"
+              : port.direction === "inout"
+                ? "◆"
+                : "▫";
+        const conjPrefix = port.conjugated ? "~" : "";
+        const conjBadge = port.conjugated ? " [~]" : "";
+        const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
+
         if (tier === "macro") {
           node.portProp(port.id, "attrs/text/display", "none");
-        } else {
+        } else if (tier === "micro") {
           node.portProp(port.id, "attrs/text/display", "block");
-          if (tier === "micro") {
-            const dirSymbol = port.direction === "in" ? "▶" : port.direction === "out" ? "◀" : port.direction === "inout" ? "◆" : "▫";
-            const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
-            node.portProp(port.id, "attrs/text/text", `${dirSymbol} ${port.name}${typeSuffix}`);
-          }
+          node.portProp(
+            port.id,
+            "attrs/text/text",
+            `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`,
+          );
+        } else {
+          // meso: standard short port name
+          node.portProp(port.id, "attrs/text/display", "block");
+          node.portProp(
+            port.id,
+            "attrs/text/text",
+            `${dirSymbol} ${conjPrefix}${port.name}`,
+          );
         }
       }
     }
@@ -857,6 +934,7 @@ export class SysMLCanvasEngine {
     this.layersPanel?.setViewType(viewIR.viewType);
     this.graph.clearCells();
     this.drillPath = [];
+    this.collapsedEdgeEndpoints.clear();
     this.renderBreadcrumbs();
 
     // 1. Run ELK layout
