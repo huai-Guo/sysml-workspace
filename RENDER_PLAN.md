@@ -190,3 +190,18 @@ export interface SysMLViewEdge {
     3. *微观详尽态（`scale > 1.25`）*：完整展示端口极性/类型签名、完整约束与状态动作细节；
   - **分屏尺寸变化自适应**：通过防抖 `ResizeObserver` 监听分屏拖拽宽度变化，在未手动拖动锁死局部特写时自动平滑居中 `zoomToFit` 适配当前视口比例。
 - **R5 验收标准**：打开画布清爽无任何标尺/坐标/常驻侧栏遮挡；多层级模型“大图套小图”层次分明零穿模，拖小图大图自动包裹，支持一键黑盒折叠与双击面包屑下钻；从 `30%` 缩放到 `200%` 全程文字与线条清晰适配；前后端测试与打包全绿。
+
+---
+
+### Milestone R6（对标 Eclipse SysON 语义识别与图形渲染深度纠偏）
+
+> **问题触发**：在真实编译 `ElectricalSystem` 等 SysML v2 模型时，暴露出隐式标准库基类污染（`vehicle : Part`）、共轭端口 `~` 与方向识别断链、General 与 Interconnection 视图职责混杂、多行隔间文字向上穿模叠压标题（`— ports Inverter`）、连线横切端口文字以及复合容器内部排版绕线与左半幅死白等 7 项核心缺陷。
+
+- [x] **R6.1 编译器语义提取增强（`ValidatorMain.java` + `view_ir.py`）**：
+  - **过滤隐式标准库基类**：识别 `Feature.getOwnedTyping()` 的 `isImplied()` 状态并建立标准库元类型黑名单（`Parts::Part`, `Items::Item`, `States::StateAction`, `Requirements::RequirementCheck` 等），消除无显式类型声明部件上的 `: Part` 噪声，同时完整保留 `ScalarValues::Real`、多重性 `[2]` 与属性默认值 `= 75.0`；
+  - **完备端口共轭 `~` 与流向识别**：解析 `ConjugatedPortDefinition.getOriginalPortDefinition()`，自动继承端口定义内部有向条目（`in`/`out`/`inout`）并在共轭 `~` 时自动反转方向；无内部条目的抽象端口按实际 `connection`/`flow` 拓扑自动将源端归位至右侧 `E`、宿端归位至左侧 `W`；
+  - **补齐非 `Relationship` 语义边**：原生提取 `TransitionUsage`（含 `trigger [guard] / effect`）、`SatisfyRequirementUsage`、`VerificationCaseUsage`、`FlowUsage` 载荷类型、`StateUsage` 内部 `entry / do / exit` 行为动作（归入状态隔间而非独立散落方框）及 `Documentation` / `reqId` 文本。
+- [x] **R6.2 对标 Eclipse SysON 的视图分离与图形符号渲染（`shapes.ts`, `elk_layout.ts`, `engine.ts`）**：
+  - **视图职责清晰解耦**：`General View` 中 `Definition` 节点以无悬空针脚的纯净结构化隔间卡呈现，并在双区排版中规整置于顶部类型目录带；`Interconnection View` 纯粹聚焦复合部件实例嵌套与边界端口互联（自动剔除未实例化蓝图定义卡）；
+  - **根治隔间穿模与断线**：修正 `@antv/x6` 多行文本默认居中导致的向上穿模，锁定 `textVerticalAnchor: "top"`，并将无效的 `<line refWidth>` 替换为自适应 `<rect>` 头部分隔线与跨隔间 `<path>` 分隔线；
+  - **SysON 边界端口与防撞线标签**：移除凸出短桩，改用 `12×12` 跨边界正方框（标准端口白底色框 vs 共轭 `~` 端口反色实心框，内嵌朝向一致的流向箭头），端口文字上移至走线走廊上方（`y = -12`）并叠加背景描边光晕，配合端口法向约束的 `manhattan` 路由与 OMG 标准边箭头（空心三角泛化、无箭头对称连接、实心箭头流/转移、虚线开放箭头满足/验证），彻底消灭连线横穿文字与反向绕线。

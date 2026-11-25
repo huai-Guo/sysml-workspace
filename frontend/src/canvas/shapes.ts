@@ -1,10 +1,64 @@
 import { Graph } from "@antv/x6/es";
-import type { SysMLViewNode } from "./types";
+import type { SysMLPort, SysMLViewNode } from "./types";
 import type { ThemeStyles } from "./themes";
 
 export const SYSML_NODE_NAME = "sysml-node";
 
-// Register custom SysML Node shape in X6
+export function truncateCompartmentLine(text: string, maxChars: number = 44): string {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars - 1).trimEnd() + "…";
+}
+
+/**
+ * Formats external port label text consistently across initial render and 3-tier LOD transitions.
+ * - `inout` uses `◆`
+ * - `in` / `out` orient arrows consistently with the port's boundary wall (`W`, `E`, `N`, `S`)
+ * - untyped (`direction == null`) omits fake box glyphs for a clean SysON label
+ */
+export function formatSysMLPortLabel(
+  port: SysMLPort,
+  lodTier: "macro" | "meso" | "micro" = "meso",
+): string {
+  if (lodTier === "macro") {
+    return "";
+  }
+
+  const side = port.sideHint || "W";
+  let dirPrefix = "";
+  if (port.direction === "inout") {
+    dirPrefix = "◆ ";
+  } else if (port.direction === "in") {
+    dirPrefix = side === "E" ? "← " : side === "N" ? "↓ " : side === "S" ? "↑ " : "→ ";
+  } else if (port.direction === "out") {
+    dirPrefix = side === "W" ? "← " : side === "N" ? "↑ " : side === "S" ? "↓ " : "→ ";
+  }
+
+  const conjPrefix = port.conjugated ? "~" : "";
+  if (lodTier === "micro") {
+    const typeSuffix = port.typeName
+      ? `: ${port.conjugated ? "~" : ""}${port.typeName}`
+      : "";
+    return `${dirPrefix}${port.name}${typeSuffix}`;
+  }
+
+  return `${dirPrefix}${conjPrefix}${port.name}`;
+}
+
+export function formatPortPinGlyph(port: SysMLPort): string {
+  const side = port.sideHint || "W";
+  if (port.direction === "inout") {
+    return side === "N" || side === "S" ? "↕" : "↔";
+  }
+  if (port.direction === "in") {
+    return side === "E" ? "←" : side === "N" ? "↓" : side === "S" ? "↑" : "→";
+  }
+  if (port.direction === "out") {
+    return side === "W" ? "←" : side === "N" ? "↑" : side === "S" ? "↓" : "→";
+  }
+  return port.conjugated ? "~" : "";
+}
+
+// Register custom Eclipse SysON-inspired Node & Border Port shapes in X6
 export function registerSysMLShapes(): void {
   try {
     Graph.registerNode(
@@ -25,16 +79,20 @@ export function registerSysMLShapes(): void {
             selector: "header",
           },
           {
+            tagName: "rect",
+            selector: "divider",
+          },
+          {
+            tagName: "path",
+            selector: "compartmentDividers",
+          },
+          {
             tagName: "text",
             selector: "stereotype",
           },
           {
             tagName: "text",
             selector: "title",
-          },
-          {
-            tagName: "line",
-            selector: "divider",
           },
           {
             tagName: "text",
@@ -53,11 +111,11 @@ export function registerSysMLShapes(): void {
           packageTab: {
             ref: "body",
             refX: 0,
-            refY: -16,
-            width: 80,
-            height: 16,
-            rx: 3,
-            ry: 3,
+            refY: -15,
+            width: 84,
+            height: 15,
+            rx: 2,
+            ry: 2,
             fill: "#1e2c40",
             stroke: "#38bdf8",
             strokeWidth: 1.5,
@@ -73,24 +131,43 @@ export function registerSysMLShapes(): void {
             ry: 0,
           },
           header: {
+            refX: 0.75,
+            refY: 0.75,
             refWidth: "100%",
-            height: 38,
+            refWidth2: -1.5,
+            height: 39,
             fill: "#1a2434",
             stroke: "none",
           },
+          divider: {
+            refX: 0,
+            refY: 40,
+            refWidth: "100%",
+            height: 1,
+            fill: "#273549",
+            stroke: "none",
+          },
+          compartmentDividers: {
+            d: "",
+            stroke: "#273549",
+            strokeWidth: 1,
+            fill: "none",
+            display: "none",
+          },
           stereotype: {
             refX: "50%",
-            refY: 8,
+            refY: 10,
             textAnchor: "middle",
             dominantBaseline: "central",
             fontSize: 10,
-            fontFamily: "ui-monospace, monospace, sans-serif",
+            fontStyle: "italic",
+            fontFamily: "Inter, system-ui, sans-serif",
             fill: "#94a3b8",
             text: "«part»",
           },
           title: {
             refX: "50%",
-            refY: 24,
+            refY: 26,
             textAnchor: "middle",
             dominantBaseline: "central",
             fontSize: 13,
@@ -99,28 +176,21 @@ export function registerSysMLShapes(): void {
             fill: "#f8fafc",
             text: "NodeName",
           },
-          divider: {
-            refX: 0,
-            refY: 38,
-            refWidth: "100%",
-            stroke: "#273549",
-            strokeWidth: 1,
-          },
           compartments: {
-            refX: 12,
-            refY: 48,
+            refX: 11,
+            refY: 46,
             textAnchor: "start",
-            dominantBaseline: "hanging",
+            textVerticalAnchor: "top",
             fontSize: 11,
-            lineHeight: 18,
-            fontFamily: "ui-monospace, monospace, sans-serif",
+            lineHeight: 17,
+            fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
             fill: "#94a3b8",
             text: "",
           },
           collapseBtn: {
             ref: "header",
             refX: "100%",
-            refX2: -36,
+            refX2: -34,
             refY: 20,
             textAnchor: "middle",
             dominantBaseline: "central",
@@ -135,7 +205,7 @@ export function registerSysMLShapes(): void {
           drillBtn: {
             ref: "header",
             refX: "100%",
-            refX2: -16,
+            refX2: -14,
             refY: 20,
             textAnchor: "middle",
             dominantBaseline: "central",
@@ -149,139 +219,174 @@ export function registerSysMLShapes(): void {
         },
         ports: {
           groups: {
+            // SysON boundary square port (12x12 straddling border) + label offset ABOVE wire corridor
             W: {
               position: "left",
               markup: [
-                { tagName: "line", selector: "stub" },
                 { tagName: "rect", selector: "pin" },
+                { tagName: "text", selector: "dirGlyph" },
               ],
               attrs: {
-                stub: {
-                  x1: -10,
-                  y1: 0,
-                  x2: 0,
-                  y2: 0,
-                  strokeWidth: 1.5,
-                },
                 pin: {
-                  width: 8,
-                  height: 8,
-                  x: -14,
-                  y: -4,
+                  width: 12,
+                  height: 12,
+                  x: -6,
+                  y: -6,
+                  rx: 1.5,
+                  ry: 1.5,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
+                dirGlyph: {
+                  x: 0,
+                  y: 0.5,
+                  textAnchor: "middle",
+                  dominantBaseline: "central",
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  pointerEvents: "none",
+                },
                 text: {
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, monospace, sans-serif",
+                  fontSize: 10.5,
+                  fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                  paintOrder: "stroke fill",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
                 },
               },
               label: {
                 position: {
                   name: "left",
-                  args: { x: -16 },
+                  args: { x: -10, y: -12 },
                 },
               },
             },
             E: {
               position: "right",
               markup: [
-                { tagName: "line", selector: "stub" },
                 { tagName: "rect", selector: "pin" },
+                { tagName: "text", selector: "dirGlyph" },
               ],
               attrs: {
-                stub: {
-                  x1: 0,
-                  y1: 0,
-                  x2: 10,
-                  y2: 0,
-                  strokeWidth: 1.5,
-                },
                 pin: {
-                  width: 8,
-                  height: 8,
-                  x: 6,
-                  y: -4,
+                  width: 12,
+                  height: 12,
+                  x: -6,
+                  y: -6,
+                  rx: 1.5,
+                  ry: 1.5,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
+                dirGlyph: {
+                  x: 0,
+                  y: 0.5,
+                  textAnchor: "middle",
+                  dominantBaseline: "central",
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  pointerEvents: "none",
+                },
                 text: {
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, monospace, sans-serif",
+                  fontSize: 10.5,
+                  fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                  paintOrder: "stroke fill",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
                 },
               },
               label: {
                 position: {
                   name: "right",
-                  args: { x: 16 },
+                  args: { x: 10, y: -12 },
                 },
               },
             },
             N: {
               position: "top",
               markup: [
-                { tagName: "line", selector: "stub" },
                 { tagName: "rect", selector: "pin" },
+                { tagName: "text", selector: "dirGlyph" },
               ],
               attrs: {
-                stub: {
-                  x1: 0,
-                  y1: -10,
-                  x2: 0,
-                  y2: 0,
-                  strokeWidth: 1.5,
-                },
                 pin: {
-                  width: 8,
-                  height: 8,
-                  x: -4,
-                  y: -14,
+                  width: 12,
+                  height: 12,
+                  x: -6,
+                  y: -6,
+                  rx: 1.5,
+                  ry: 1.5,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
+                dirGlyph: {
+                  x: 0,
+                  y: 0.5,
+                  textAnchor: "middle",
+                  dominantBaseline: "central",
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  pointerEvents: "none",
+                },
                 text: {
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, monospace, sans-serif",
+                  fontSize: 10.5,
+                  fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                  textAnchor: "start",
+                  paintOrder: "stroke fill",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
                 },
               },
               label: {
                 position: {
                   name: "top",
-                  args: { y: -16 },
+                  args: { x: 9, y: -11 },
                 },
               },
             },
             S: {
               position: "bottom",
               markup: [
-                { tagName: "line", selector: "stub" },
                 { tagName: "rect", selector: "pin" },
+                { tagName: "text", selector: "dirGlyph" },
               ],
               attrs: {
-                stub: {
-                  x1: 0,
-                  y1: 0,
-                  x2: 0,
-                  y2: 10,
-                  strokeWidth: 1.5,
-                },
                 pin: {
-                  width: 8,
-                  height: 8,
-                  x: -4,
-                  y: 6,
+                  width: 12,
+                  height: 12,
+                  x: -6,
+                  y: -6,
+                  rx: 1.5,
+                  ry: 1.5,
                   magnet: true,
                   strokeWidth: 1.5,
                 },
+                dirGlyph: {
+                  x: 0,
+                  y: 0.5,
+                  textAnchor: "middle",
+                  dominantBaseline: "central",
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  fontFamily: "Inter, system-ui, sans-serif",
+                  pointerEvents: "none",
+                },
                 text: {
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, monospace, sans-serif",
+                  fontSize: 10.5,
+                  fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                  textAnchor: "start",
+                  paintOrder: "stroke fill",
+                  strokeWidth: 3,
+                  strokeLinejoin: "round",
                 },
               },
               label: {
                 position: {
                   name: "bottom",
-                  args: { y: 16 },
+                  args: { x: 9, y: 13 },
                 },
               },
             },
@@ -301,6 +406,7 @@ export interface BuildNodeAttrsOptions {
   isCollapsed?: boolean;
   lodTier?: "macro" | "meso" | "micro";
   scale?: number;
+  nodeWidth?: number;
 }
 
 export function buildNodeAttrs(
@@ -312,14 +418,22 @@ export function buildNodeAttrs(
   const isUsage = node.shapeCategory === "usage";
   const isPackage = node.shapeCategory === "package";
   const isState = node.shapeCategory === "state";
+  const isAction = node.shapeCategory === "action";
   const isReq = node.shapeCategory === "requirement";
 
-  // Corner radiuses per SysML standard
+  // Corner radiuses per OMG SysML v2 / Eclipse SysON notation:
+  // - Definition / Package / Requirement: sharp 0px corners
+  // - Part/Item Usage: soft 6px corners
+  // - Action Usage: rounded 10px corners
+  // - State: stadium/pill 16px corners
   let rx = 0;
   let ry = 0;
   if (isUsage) {
     rx = 4;
     ry = 4;
+  } else if (isAction) {
+    rx = 10;
+    ry = 10;
   } else if (isState) {
     rx = 16;
     ry = 16;
@@ -328,10 +442,12 @@ export function buildNodeAttrs(
     ry = 0;
   }
 
-  // Stroke color per semantic layer
+  // Semantic border stroke color
   let stroke = theme.node.stroke;
   if (isReq) {
     stroke = theme.edge.satisfyStroke;
+  } else if (isState) {
+    stroke = theme.edge.transitionStroke;
   } else if (isPackage) {
     stroke = theme.node.packageTabFill || theme.node.stroke;
   }
@@ -352,62 +468,81 @@ export function buildNodeAttrs(
     bodyFill = shades[Math.min(depth, shades.length - 1)];
     headerFill = headerShades[Math.min(depth, headerShades.length - 1)];
   } else {
-    // Paper Clean B&W
     const shades = ["#ffffff", "#fdfdfd", "#f8f8f8", "#f4f4f4"];
     const headerShades = ["#f8fafc", "#f1f5f9", "#e2e8f0", "#cbd5e1"];
     bodyFill = shades[Math.min(depth, shades.length - 1)];
     headerFill = headerShades[Math.min(depth, headerShades.length - 1)];
   }
 
-  // Build compartments text
+  const lod = options.lodTier || "meso";
+  const scale = options.scale || 1.0;
+  const isMacro = lod === "macro";
+  const isMicro = lod === "micro";
+
+  // Build SysON-style structured compartments + inter-compartment horizontal divider lines
   const compLines: string[] = [];
+  const dividerYOffsets: number[] = [];
+  const lineHeight = 17;
+  const startY = 46;
+
   if (node.compartments && node.compartments.length > 0) {
-    for (const comp of node.compartments) {
-      compLines.push(`— ${comp.title} —`);
-      for (const item of comp.items) {
-        compLines.push(`  ${item.text}`);
+    node.compartments.forEach((comp, idx) => {
+      if (idx > 0) {
+        // Reserve a clean spacer row for the horizontal compartment divider rule
+        dividerYOffsets.push(startY + compLines.length * lineHeight + Math.round(lineHeight * 0.45));
+        compLines.push("");
       }
-    }
+      compLines.push(`${comp.title}`);
+      for (const item of comp.items) {
+        const displayItem = isMicro ? item.text : truncateCompartmentLine(item.text, 44);
+        compLines.push(`  ${displayItem}`);
+      }
+    });
   }
+
   const compartmentsText = compLines.join("\n");
   const hasCompartments = compLines.length > 0;
 
-  // Title with type label if present
   const cleanTypeLabel = node.typeLabel
-    ? node.typeLabel.trim().startsWith(":")
+    ? node.typeLabel.trim().startsWith(":") || node.typeLabel.trim().startsWith("[")
       ? node.typeLabel.trim()
       : `: ${node.typeLabel.trim()}`
     : "";
   const titleText = node.name + (cleanTypeLabel ? ` ${cleanTypeLabel}` : "");
 
-  // LOD compensations
-  const lod = options.lodTier || "meso";
-  const scale = options.scale || 1.0;
-  const isMacro = lod === "macro";
   const compTitleSize = isMacro ? Math.min(26, Math.round(13 / Math.max(scale, 0.35))) : 13;
-  const compStrokeWidth = isMacro ? Math.min(4, Math.max(1.5, 1.5 / Math.max(scale, 0.5))) : theme.node.strokeWidth;
+  const compStrokeWidth = isMacro
+    ? Math.min(4, Math.max(1.5, 1.5 / Math.max(scale, 0.5)))
+    : theme.node.strokeWidth;
 
   const isCompound = options.isCompound ?? false;
   const isCollapsed = options.isCollapsed ?? false;
+  const showComps = hasCompartments && !node.collapsed && !isMacro && !isCollapsed;
+
+  const w = options.nodeWidth || 220;
+  const subDividerPath =
+    showComps && dividerYOffsets.length > 0
+      ? dividerYOffsets.map((y) => `M 0 ${y} H ${w}`).join(" ")
+      : "";
 
   return {
     packageTab: {
       display: isPackage ? "block" : "none",
       fill: theme.node.packageTabFill,
-      stroke: stroke,
+      stroke,
       strokeWidth: compStrokeWidth,
     },
     body: {
       fill: bodyFill,
-      stroke: stroke,
+      stroke,
       strokeWidth: compStrokeWidth,
       rx,
       ry,
     },
     header: {
       fill: headerFill,
-      rx: rx > 0 ? rx : 0,
-      ry: ry > 0 ? ry : 0,
+      rx: rx > 0 ? Math.max(0, rx - 1) : 0,
+      ry: ry > 0 ? Math.max(0, ry - 1) : 0,
       display: "block",
     },
     stereotype: {
@@ -421,14 +556,21 @@ export function buildNodeAttrs(
       fontSize: compTitleSize,
     },
     divider: {
+      fill: theme.node.dividerColor,
       stroke: theme.node.dividerColor,
-      strokeWidth: compStrokeWidth,
-      display: hasCompartments && !node.collapsed && !isMacro && !isCollapsed ? "block" : "none",
+      height: 1,
+      display: (showComps || (isCompound && !isCollapsed && !isMacro)) ? "block" : "none",
+    },
+    compartmentDividers: {
+      d: subDividerPath,
+      stroke: theme.node.dividerColor,
+      display: subDividerPath ? "block" : "none",
     },
     compartments: {
       fill: theme.node.textSecondary,
       text: compartmentsText,
-      display: hasCompartments && !node.collapsed && !isMacro && !isCollapsed ? "block" : "none",
+      textVerticalAnchor: "top",
+      display: showComps ? "block" : "none",
     },
     collapseBtn: {
       display: isCompound ? "block" : "none",
@@ -450,47 +592,41 @@ export function buildPortItems(
 ): Record<string, unknown>[] {
   if (!node.ports || node.ports.length === 0) return [];
 
-  const isMacro = options.lodTier === "macro";
-  const isMicro = options.lodTier === "micro";
+  const lodTier = options.lodTier || "meso";
+  const isMacro = lodTier === "macro";
 
   return node.ports.map((port) => {
     const group = port.sideHint || "W";
-    const dirSymbol =
-      port.direction === "in"
-        ? "▶"
-        : port.direction === "out"
-          ? "◀"
-          : port.direction === "inout"
-            ? "◆"
-            : "▫";
-    const conjPrefix = port.conjugated ? "~" : "";
-    const conjBadge = port.conjugated ? " [~]" : "";
-    const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
+    const portLabel = formatSysMLPortLabel(port, lodTier);
+    const pinGlyph = formatPortPinGlyph(port);
 
-    let portLabel = `${dirSymbol} ${conjPrefix}${port.name}`;
-    if (isMicro) {
-      portLabel = `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`;
-    } else if (isMacro) {
-      portLabel = ""; // In bird's-eye view, hide port labels to avoid noise
-    }
+    // OMG SysML v2 / Eclipse SysON conjugation distinction:
+    // - Standard port: clean node surface fill + accent border + accent arrow
+    // - Conjugated (~) port: inverted accent fill + contrasting glyph
+    const pinFill = port.conjugated ? theme.port.fill : theme.node.fill;
+    const glyphFill = port.conjugated ? "#ffffff" : theme.port.stroke;
 
     return {
       id: port.id,
       group,
       attrs: {
-        stub: {
+        pin: {
+          fill: pinFill,
           stroke: theme.port.stroke,
           strokeWidth: 1.5,
         },
-        pin: {
-          fill: theme.port.fill,
-          stroke: theme.port.stroke,
-          strokeWidth: 1.5,
+        dirGlyph: {
+          text: pinGlyph,
+          fill: glyphFill,
+          display: isMacro ? "none" : "block",
         },
         text: {
           text: portLabel,
           fill: theme.port.textColor,
-          display: isMacro ? "none" : "block",
+          stroke: theme.canvasBg,
+          strokeWidth: 3,
+          paintOrder: "stroke fill",
+          display: isMacro || !portLabel ? "none" : "block",
         },
       },
     };

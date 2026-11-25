@@ -17,6 +17,7 @@ import {
   SYSML_NODE_NAME,
   buildNodeAttrs,
   buildPortItems,
+  formatSysMLPortLabel,
 } from "./shapes";
 import { CadBoxSelection } from "./selection";
 import { CadLayersPanel } from "./layers_panel";
@@ -257,7 +258,7 @@ export class SysMLCanvasEngine {
                   minX = Math.min(minX, p.x);
                   maxX = Math.max(maxX, p.x + s.width);
                 }
-                return Math.max(200, maxX - minX + 270);
+                return Math.max(200, maxX - minX + 112);
               }
             }
             return 80;
@@ -469,15 +470,15 @@ export class SysMLCanvasEngine {
         },
         this.currentViewIR?.viewType,
       );
-      this.handleChildNodeMovedOrResized(node);
+      this.handleChildNodeMovedOrResized(node, true);
     });
 
     this.graph.on("node:moving", ({ node }) => {
-      this.handleChildNodeMovedOrResized(node);
+      this.handleChildNodeMovedOrResized(node, false);
     });
 
     this.graph.on("node:resizing", ({ node }) => {
-      this.handleChildNodeMovedOrResized(node);
+      this.handleChildNodeMovedOrResized(node, false);
     });
 
     this.graph.on("node:resized", ({ node }) => {
@@ -494,7 +495,7 @@ export class SysMLCanvasEngine {
         },
         this.currentViewIR?.viewType,
       );
-      this.handleChildNodeMovedOrResized(node);
+      this.handleChildNodeMovedOrResized(node, true);
     });
 
     // Node click handlers: collapseBtn, drillBtn, foldBtn, or source location selection
@@ -584,15 +585,15 @@ export class SysMLCanvasEngine {
 
   // --- R5.2 真·大图套小图 (Auto-Fit Bounds, Collapse & Drill-Down) ---
 
-  private handleChildNodeMovedOrResized(childCell: Node): void {
+  private handleChildNodeMovedOrResized(childCell: Node, persistUserMoved = false): void {
     const data = childCell.getData() as { viewNode?: SysMLViewNode } | undefined;
     const parentId = data?.viewNode?.parentId;
     if (!parentId) return;
 
-    this.updateParentBounds(parentId);
+    this.updateParentBounds(parentId, persistUserMoved);
   }
 
-  public updateParentBounds(parentId: string): void {
+  public updateParentBounds(parentId: string, persistUserMoved = false): void {
     const parentCell = this.graph.getCellById(parentId) as Node;
     if (!parentCell || !parentCell.isNode()) return;
 
@@ -608,6 +609,8 @@ export class SysMLCanvasEngine {
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
+    let hasWestPorts = false;
+    let hasEastPorts = false;
 
     for (const child of children) {
       const pos = child.getPosition();
@@ -616,60 +619,71 @@ export class SysMLCanvasEngine {
       minY = Math.min(minY, pos.y);
       maxX = Math.max(maxX, pos.x + size.width);
       maxY = Math.max(maxY, pos.y + size.height);
+
+      const cNode = (child.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+      for (const p of cNode?.ports || []) {
+        if ((p.sideHint || "W") === "W") hasWestPorts = true;
+        if (p.sideHint === "E") hasEastPorts = true;
+      }
     }
 
     const parentPos = parentCell.getPosition();
     const parentSize = parentCell.getSize();
 
     const pViewNode = (parentCell.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
-    let compHeight = 0;
-    if (pViewNode?.compartments) {
-      for (const comp of pViewNode.compartments) {
-        compHeight += 24 + comp.items.length * 18;
-      }
+    let totalLines = 0;
+    if (pViewNode?.compartments && pViewNode.compartments.length > 0) {
+      pViewNode.compartments.forEach((comp, idx) => {
+        if (idx > 0) totalLines += 1;
+        totalLines += 1 + comp.items.length;
+      });
     }
-    const topPadding = Math.max(56, 44 + compHeight + 20);
-    const padLeft = 140;
-    const padRight = 130;
-    const padBottom = 35;
+    const compHeight = totalLines > 0 ? totalLines * 17 + 14 : 0;
+    const topPadding = Math.max(58, 44 + compHeight + (totalLines > 0 ? 18 : 14));
+    const padLeft = hasWestPorts ? 84 : 40;
+    const padRight = hasEastPorts ? 84 : 40;
+    const padBottom = 32;
 
-    // Tight required envelope enclosing all children with padding
-    const fitX = minX - padLeft;
-    const fitY = minY - topPadding;
-    const fitRight = maxX + padRight;
-    const fitBottom = maxY + padBottom;
-
-    // Dynamically adjust parent position and dimensions:
-    // Expands when children move outward, shrinks back when children move inward
-    const desiredX = fitX;
-    const desiredY = fitY;
-    const newW = Math.max(300, fitRight - desiredX);
-    const newH = Math.max(120, fitBottom - desiredY);
+    const desiredX = minX - padLeft;
+    const desiredY = minY - topPadding;
+    const newW = Math.max(300, maxX + padRight - desiredX);
+    const newH = Math.max(120, maxY + padBottom - desiredY);
 
     if (desiredX !== parentPos.x || desiredY !== parentPos.y) {
       parentCell.setPosition(desiredX, desiredY, { deep: false });
     }
     if (newW !== parentSize.width || newH !== parentSize.height) {
       parentCell.setSize(newW, newH);
+      if (pViewNode) {
+        const refreshed = buildNodeAttrs(pViewNode, this.currentThemeStyles, {
+          depth: this.calculateNodeDepth(pViewNode),
+          isCompound: true,
+          isCollapsed: this.collapsedNodes.has(parentId),
+          lodTier: this.currentLODTier,
+          scale: this.currentScale,
+          nodeWidth: newW,
+        });
+        parentCell.attr("compartmentDividers/d", (refreshed.compartmentDividers as any)?.d || "");
+      }
     }
 
-    // Persist updated bounds to sidecar so position is remembered
-    this.sidecar.set(
-      parentId,
-      {
-        x: desiredX,
-        y: desiredY,
-        width: newW,
-        height: newH,
-        userMoved: true,
-      },
-      this.currentViewIR?.viewType,
-    );
+    if (persistUserMoved) {
+      this.sidecar.set(
+        parentId,
+        {
+          x: desiredX,
+          y: desiredY,
+          width: newW,
+          height: newH,
+          userMoved: true,
+        },
+        this.currentViewIR?.viewType,
+      );
+    }
 
-    // Recursively update grandparent
     const grandParentId = pViewNode?.parentId;
     if (grandParentId) {
-      this.updateParentBounds(grandParentId);
+      this.updateParentBounds(grandParentId, persistUserMoved);
     }
   }
 
@@ -862,10 +876,6 @@ export class SysMLCanvasEngine {
     this.currentLODTier = tier;
     const theme = this.currentThemeStyles;
 
-    // Macro tier: inverse font compensation on title, stroke width compensation, hide compartments
-    const compTitleSize = tier === "macro" ? Math.min(26, Math.round(13 / Math.max(scale, 0.35))) : 13;
-    const compStrokeWidth = tier === "macro" ? Math.min(4, Math.max(1.5, 1.5 / Math.max(scale, 0.5))) : 1.5;
-
     for (const node of this.graph.getNodes()) {
       const data = node.getData() as { viewNode?: SysMLViewNode } | undefined;
       const vn = data?.viewNode;
@@ -874,51 +884,26 @@ export class SysMLCanvasEngine {
       const isCompound = this.isCompoundNode(vn.id);
       const isCollapsed = this.collapsedNodes.has(vn.id);
 
-      node.attr("title/fontSize", compTitleSize);
-      node.attr("body/strokeWidth", compStrokeWidth);
+      const size = node.getSize();
+      const refreshedAttrs = buildNodeAttrs(vn, theme, {
+        depth: this.calculateNodeDepth(vn),
+        isCompound,
+        isCollapsed,
+        lodTier: tier,
+        scale,
+        nodeWidth: size.width,
+      });
+      node.setAttrs(refreshedAttrs as any);
 
-      if (tier === "macro") {
-        node.attr("compartments/display", "none");
-        node.attr("divider/display", "none");
-        node.attr("stereotype/display", "none");
-      } else {
-        const hasComps = vn.compartments && vn.compartments.length > 0;
-        node.attr("compartments/display", hasComps && !vn.collapsed && !isCollapsed ? "block" : "none");
-        node.attr("divider/display", hasComps && !vn.collapsed && !isCollapsed ? "block" : "none");
-        node.attr("stereotype/display", "block");
-      }
-
-      // Port labels
+      // Port labels & internal directional glyphs
       for (const port of vn.ports || []) {
-        const dirSymbol =
-          port.direction === "in"
-            ? "▶"
-            : port.direction === "out"
-              ? "◀"
-              : port.direction === "inout"
-                ? "◆"
-                : "▫";
-        const conjPrefix = port.conjugated ? "~" : "";
-        const conjBadge = port.conjugated ? " [~]" : "";
-        const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
-
-        if (tier === "macro") {
+        const portLabel = formatSysMLPortLabel(port, tier);
+        node.portProp(port.id, "attrs/dirGlyph/display", tier === "macro" ? "none" : "block");
+        if (tier === "macro" || !portLabel) {
           node.portProp(port.id, "attrs/text/display", "none");
-        } else if (tier === "micro") {
-          node.portProp(port.id, "attrs/text/display", "block");
-          node.portProp(
-            port.id,
-            "attrs/text/text",
-            `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`,
-          );
         } else {
-          // meso: standard short port name
           node.portProp(port.id, "attrs/text/display", "block");
-          node.portProp(
-            port.id,
-            "attrs/text/text",
-            `${dirSymbol} ${conjPrefix}${port.name}`,
-          );
+          node.portProp(port.id, "attrs/text/text", portLabel);
         }
       }
     }
@@ -1042,6 +1027,7 @@ export class SysMLCanvasEngine {
         isCollapsed,
         lodTier: this.currentLODTier,
         scale: this.currentScale,
+        nodeWidth: finalWidth,
       });
       const portItems = buildPortItems(node, theme, {
         lodTier: this.currentLODTier,
@@ -1093,23 +1079,57 @@ export class SysMLCanvasEngine {
       }
     }
 
-    // Auto-fit parent bounds to contain all children and their port labels
+    // Auto-fit parent bounds to contain all children (without marking as manually userMoved)
     for (const node of viewIR.nodes) {
       if (this.isCompoundNode(node.id)) {
-        this.updateParentBounds(node.id);
+        const saved = this.sidecar.get(node.id, viewIR.viewType);
+        if (!saved?.userMoved) {
+          this.updateParentBounds(node.id, false);
+        }
       }
     }
 
-    // 4. Instantiate and add edges
+    const sideToDir = (
+      side?: "N" | "S" | "E" | "W",
+    ): ("top" | "bottom" | "left" | "right")[] | undefined => {
+      if (side === "W") return ["left"];
+      if (side === "E") return ["right"];
+      if (side === "N") return ["top"];
+      if (side === "S") return ["bottom"];
+      return undefined;
+    };
+
+    // 4. Instantiate and add edges with port-direction-aware SysON orthogonal routing
     for (const edge of viewIR.edges || []) {
       if (!nodeCells.has(edge.sourceId) || !nodeCells.has(edge.targetId)) {
         continue;
       }
 
+      const srcNode = nodeDataMap.get(edge.sourceId);
+      const tgtNode = nodeDataMap.get(edge.targetId);
+      const srcPort = edge.sourcePortId
+        ? srcNode?.ports.find((p) => p.id === edge.sourcePortId)
+        : undefined;
+      const tgtPort = edge.targetPortId
+        ? tgtNode?.ports.find((p) => p.id === edge.targetPortId)
+        : undefined;
+
+      const startDirs = srcPort
+        ? sideToDir(srcPort.sideHint)
+        : edge.kind === "specialization"
+          ? (["top", "left", "right"] as const)
+          : undefined;
+      const endDirs = tgtPort
+        ? sideToDir(tgtPort.sideHint)
+        : edge.kind === "specialization"
+          ? (["bottom", "left", "right"] as const)
+          : undefined;
+
       const edgeAttrs = this.buildEdgeAttrs(edge, theme);
 
       this.graph.addEdge({
         id: edge.id,
+        zIndex: 20,
         data: { edge, layer: edge.layer },
         source: edge.sourcePortId
           ? { cell: edge.sourceId, port: edge.sourcePortId }
@@ -1120,28 +1140,39 @@ export class SysMLCanvasEngine {
         router: this.orthoEnabled
           ? {
               name: "manhattan",
-              args: { padding: 16, step: 10 },
+              args: {
+                padding: 22,
+                step: 10,
+                ...(startDirs ? { startDirections: [...startDirs] } : {}),
+                ...(endDirs ? { endDirections: [...endDirs] } : {}),
+              },
             }
           : {
               name: "normal",
             },
         connector: {
-          name: "rounded",
-          args: { radius: 6 },
+          name: "jumpover",
+          args: { type: "arc", size: 5, radius: 4 },
         },
         attrs: edgeAttrs,
         labels: edge.label
           ? [
               {
+                position: {
+                  distance: 0.5,
+                  offset: -10,
+                },
                 attrs: {
                   text: {
                     text: edge.label,
                     fill: theme.edge.textColor,
-                    fontSize: 11,
-                    fontFamily: "ui-monospace, monospace, sans-serif",
+                    fontSize: 10.5,
+                    fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
                   },
                   rect: {
-                    fill: theme.node.fill,
+                    fill: theme.canvasBg,
+                    stroke: theme.node.dividerColor,
+                    strokeWidth: 0.75,
                     rx: 3,
                     ry: 3,
                   },
@@ -1157,28 +1188,100 @@ export class SysMLCanvasEngine {
   }
 
   private buildEdgeAttrs(edge: SysMLViewEdge, theme: ThemeStyles): Record<string, any> {
-    const isControlFlow = edge.kind === "transition";
-    const isRequirement = edge.kind === "satisfy" || edge.kind === "verify";
+    if (edge.kind === "specialization") {
+      const strokeColor = theme.edge.specializationStroke;
+      return {
+        line: {
+          stroke: strokeColor,
+          strokeWidth: 1.5,
+          targetMarker: {
+            name: "block",
+            width: 10,
+            height: 8,
+            fill: theme.canvasBg,
+            stroke: strokeColor,
+            strokeWidth: 1.5,
+          },
+        },
+      };
+    }
 
-    const strokeColor = isRequirement
-      ? theme.edge.satisfyStroke
-      : isControlFlow
-        ? theme.edge.transitionStroke
-        : theme.edge.connectionStroke;
+    if (edge.kind === "composition") {
+      const strokeColor = theme.edge.specializationStroke;
+      return {
+        line: {
+          stroke: strokeColor,
+          strokeWidth: 1.5,
+          sourceMarker: {
+            name: "diamond",
+            width: 11,
+            height: 7,
+            fill: strokeColor,
+            stroke: strokeColor,
+          },
+          targetMarker: null,
+        },
+      };
+    }
 
-    const strokeDash = isControlFlow ? "4 4" : isRequirement ? "6 3" : undefined;
+    if (edge.kind === "satisfy" || edge.kind === "verify" || edge.kind === "dependency") {
+      const strokeColor =
+        edge.kind === "dependency" ? theme.edge.specializationStroke : theme.edge.satisfyStroke;
+      return {
+        line: {
+          stroke: strokeColor,
+          strokeWidth: 1.5,
+          strokeDasharray: "6 4",
+          targetMarker: {
+            name: "async",
+            size: 8,
+            fill: "none",
+            stroke: strokeColor,
+            strokeWidth: 1.5,
+          },
+        },
+      };
+    }
 
+    if (edge.kind === "transition") {
+      const strokeColor = theme.edge.transitionStroke;
+      return {
+        line: {
+          stroke: strokeColor,
+          strokeWidth: 1.5,
+          targetMarker: {
+            name: "classic",
+            size: 7,
+            fill: strokeColor,
+            stroke: strokeColor,
+          },
+        },
+      };
+    }
+
+    if (edge.kind === "flow") {
+      const strokeColor = theme.edge.flowStroke;
+      return {
+        line: {
+          stroke: strokeColor,
+          strokeWidth: 1.75,
+          targetMarker: {
+            name: "block",
+            width: 8,
+            height: 6,
+            fill: strokeColor,
+            stroke: strokeColor,
+          },
+        },
+      };
+    }
+
+    // SysML v2 structural `connection` (`connect a to b`): clean symmetric binding line without colliding arrowheads
     return {
       line: {
-        stroke: strokeColor,
-        strokeWidth: 1.5,
-        strokeDasharray: strokeDash,
-        targetMarker: {
-          name: "classic",
-          size: 7,
-          fill: strokeColor,
-          stroke: strokeColor,
-        },
+        stroke: theme.edge.connectionStroke,
+        strokeWidth: 1.6,
+        targetMarker: null,
       },
     };
   }
@@ -1193,20 +1296,25 @@ export class SysMLCanvasEngine {
         const depth = this.calculateNodeDepth(node);
         const isCompound = this.isCompoundNode(node.id);
         const isCollapsed = this.collapsedNodes.has(node.id);
+        const size = cell.getSize();
         const attrs = buildNodeAttrs(node, theme, {
           depth,
           isCompound,
           isCollapsed,
           lodTier: this.currentLODTier,
           scale: this.currentScale,
+          nodeWidth: size.width,
         });
         cell.setAttrs(attrs as any);
 
         for (const port of node.ports || []) {
-          cell.portProp(port.id, "attrs/stub/stroke", theme.port.stroke);
-          cell.portProp(port.id, "attrs/pin/fill", theme.port.fill);
+          const pinFill = port.conjugated ? theme.port.fill : theme.node.fill;
+          const glyphFill = port.conjugated ? "#ffffff" : theme.port.stroke;
+          cell.portProp(port.id, "attrs/pin/fill", pinFill);
           cell.portProp(port.id, "attrs/pin/stroke", theme.port.stroke);
+          cell.portProp(port.id, "attrs/dirGlyph/fill", glyphFill);
           cell.portProp(port.id, "attrs/text/fill", theme.port.textColor);
+          cell.portProp(port.id, "attrs/text/stroke", theme.canvasBg);
         }
       }
     }

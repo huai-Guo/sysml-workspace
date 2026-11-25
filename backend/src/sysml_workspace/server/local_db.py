@@ -24,32 +24,37 @@ def _now() -> str:
 
 
 SAMPLE_SYSML = """package ElectricalSystem {
-    port def PowerPort;
-    port def SignalPort;
+    port def PowerPort {
+        out item dcPower;
+    }
+    port def SignalPort {
+        out item cmd;
+    }
 
     part def Battery {
-        port powerOut: PowerPort;
+        attribute capacity : ScalarValues::Real = 75.0;
+        port powerOut : PowerPort;
     }
 
     part def Inverter {
-        port powerIn: PowerPort;
-        port powerOut: PowerPort;
-        port ctrl: SignalPort;
+        port powerIn : ~PowerPort;
+        port powerOut : PowerPort;
+        port ctrl : ~SignalPort;
     }
 
     part def ElectricMotor {
-        port powerIn: PowerPort;
+        port powerIn : ~PowerPort;
     }
 
     part def Controller {
-        port controlSignal: SignalPort;
+        port controlSignal : SignalPort;
     }
 
     part vehicle {
-        part b: Battery;
-        part inv: Inverter;
-        part m: ElectricMotor;
-        part c: Controller;
+        part b : Battery;
+        part inv : Inverter;
+        part m : ElectricMotor;
+        part c : Controller;
 
         connection c1 connect b.powerOut to inv.powerIn;
         connection c2 connect inv.powerOut to m.powerIn;

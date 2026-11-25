@@ -10,14 +10,30 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
+import java.util.HashSet;
+import java.util.Set;
 import com.google.gson.GsonBuilder;
 import org.eclipse.emf.ecore.EObject;
+import org.eclipse.xtext.nodemodel.ICompositeNode;
 import org.eclipse.xtext.nodemodel.util.NodeModelUtils;
-import org.omg.sysml.lang.sysml.Element;
-import org.omg.sysml.lang.sysml.Relationship;
-import org.omg.sysml.lang.sysml.Membership;
-import org.omg.sysml.lang.sysml.Feature;
+import org.omg.sysml.lang.sysml.Comment;
+import org.omg.sysml.lang.sysml.ConjugatedPortDefinition;
 import org.omg.sysml.lang.sysml.Connector;
+import org.omg.sysml.lang.sysml.Element;
+import org.omg.sysml.lang.sysml.Feature;
+import org.omg.sysml.lang.sysml.FeatureTyping;
+import org.omg.sysml.lang.sysml.FeatureValue;
+import org.omg.sysml.lang.sysml.Flow;
+import org.omg.sysml.lang.sysml.Membership;
+import org.omg.sysml.lang.sysml.Multiplicity;
+import org.omg.sysml.lang.sysml.Relationship;
+import org.omg.sysml.lang.sysml.RequirementDefinition;
+import org.omg.sysml.lang.sysml.RequirementUsage;
+import org.omg.sysml.lang.sysml.SatisfyRequirementUsage;
+import org.omg.sysml.lang.sysml.StateUsage;
+import org.omg.sysml.lang.sysml.TransitionUsage;
+import org.omg.sysml.lang.sysml.Type;
+import org.omg.sysml.lang.sysml.VerificationCaseUsage;
 
 import org.eclipse.xtext.validation.Issue;
 import org.omg.sysml.interactive.SysMLInteractive;
@@ -133,9 +149,76 @@ public final class ValidatorMain {
             entity.put("location", Map.of("line", node.getStartLine(), "offset", node.getOffset(),
                     "length", node.getLength(), "offset_encoding", "utf-16"));
             if (element instanceof Feature feature) {
-                entity.put("types", feature.getType().stream().map(type -> reference(type, ids)).toList());
+                Set<Element> explicitTypes = new HashSet<>();
+                for (FeatureTyping typing : feature.getOwnedTyping()) {
+                    if (!typing.isImplied() && typing.getType() != null) {
+                        explicitTypes.add(typing.getType());
+                    }
+                }
+                List<Map<String, Object>> typeRefs = new ArrayList<>();
+                for (Type type : feature.getType()) {
+                    Map<String, Object> ref = reference(type, ids);
+                    boolean isConjugated = type instanceof ConjugatedPortDefinition;
+                    if (isConjugated) {
+                        ConjugatedPortDefinition cpd = (ConjugatedPortDefinition) type;
+                        Element orig = cpd.getOriginalPortDefinition();
+                        ref.put("conjugated", true);
+                        if (orig != null) {
+                            ref.put("original_id", ids.get(orig));
+                            ref.put("original_name", orig.getQualifiedName());
+                            ref.put("original_label", orig.getName());
+                        }
+                    }
+                    ref.put("implied", !explicitTypes.contains(type) && !isConjugated);
+                    typeRefs.add(ref);
+                }
+                entity.put("types", typeRefs);
                 entity.put("chaining_features", feature.getChainingFeature().stream().map(part -> reference(part, ids)).toList());
                 if (feature.getDirection() != null) entity.put("direction", feature.getDirection().getLiteral());
+
+                for (Membership m : feature.getOwnedMembership()) {
+                    if (m instanceof FeatureValue fv && fv.getValue() != null) {
+                        String valText = nodeText(fv.getValue());
+                        if (valText != null && !valText.isEmpty()) {
+                            entity.put("value_text", valText);
+                            break;
+                        }
+                    }
+                }
+            }
+            for (Element owned : element.getOwnedElement()) {
+                if (owned instanceof Multiplicity mult) {
+                    String multText = nodeText(mult);
+                    if (multText != null && !multText.isEmpty()) {
+                        entity.put("multiplicity", multText);
+                        break;
+                    }
+                }
+            }
+            if (element instanceof Comment comment && comment.getBody() != null) {
+                entity.put("body", comment.getBody().trim());
+            }
+            if (element instanceof RequirementDefinition reqDef) {
+                if (reqDef.getReqId() != null) entity.put("req_id", reqDef.getReqId());
+                if (reqDef.getText() != null && !reqDef.getText().isEmpty()) {
+                    entity.put("req_text", String.join(" ", reqDef.getText()).trim());
+                }
+            } else if (element instanceof RequirementUsage reqUsage) {
+                if (reqUsage.getReqId() != null) entity.put("req_id", reqUsage.getReqId());
+                if (reqUsage.getText() != null && !reqUsage.getText().isEmpty()) {
+                    entity.put("req_text", String.join(" ", reqUsage.getText()).trim());
+                }
+            }
+            if (element instanceof StateUsage stateUsage) {
+                if (stateUsage.getEntryAction() != null && ids.containsKey(stateUsage.getEntryAction())) {
+                    entity.put("entry_action_id", ids.get(stateUsage.getEntryAction()));
+                }
+                if (stateUsage.getDoAction() != null && ids.containsKey(stateUsage.getDoAction())) {
+                    entity.put("do_action_id", ids.get(stateUsage.getDoAction()));
+                }
+                if (stateUsage.getExitAction() != null && ids.containsKey(stateUsage.getExitAction())) {
+                    entity.put("exit_action_id", ids.get(stateUsage.getExitAction()));
+                }
             }
             entities.add(entity);
             if (owner != null && ids.containsKey(owner)) {
@@ -150,11 +233,65 @@ public final class ValidatorMain {
                     sources = connector.getSourceFeature() == null ? List.of() : List.of(connector.getSourceFeature());
                     targets = connector.getTargetFeature();
                 }
+                String payloadLabel = null;
+                if (element instanceof Flow flow && flow.getPayloadType() != null && !flow.getPayloadType().isEmpty()) {
+                    List<String> pNames = flow.getPayloadType().stream()
+                            .map(Element::getName)
+                            .filter(n -> n != null && !n.isBlank())
+                            .toList();
+                    if (!pNames.isEmpty()) payloadLabel = String.join(", ", pNames);
+                }
                 for (Element source : sources) for (Element target : targets) {
-                    relations.add(Map.of("id", "r" + relations.size(), "kind", element.eClass().getName(),
-                            "semantic_id", ids.get(element), "source", reference(source, ids),
-                            "target", reference(target, ids)));
+                    if (source == null || target == null) continue;
+                    Map<String, Object> rel = new LinkedHashMap<>();
+                    rel.put("id", "r" + relations.size());
+                    rel.put("kind", element.eClass().getName());
+                    rel.put("semantic_id", ids.get(element));
+                    if (element.getDeclaredName() != null) rel.put("name", element.getDeclaredName());
+                    if (payloadLabel != null) rel.put("payload", payloadLabel);
+                    rel.put("source", reference(source, ids));
+                    rel.put("target", reference(target, ids));
+                    relations.add(rel);
                     if (relations.size() > 10000) throw new IOException("Model exceeds 10000 relationships.");
+                }
+            } else if (element instanceof TransitionUsage trans) {
+                Element source = trans.getSource();
+                Element target = trans.getTarget();
+                if (source != null && target != null) {
+                    Map<String, Object> rel = new LinkedHashMap<>();
+                    rel.put("id", "r" + relations.size());
+                    rel.put("kind", "TransitionUsage");
+                    rel.put("semantic_id", ids.get(element));
+                    String transLabel = buildTransitionLabel(trans);
+                    if (transLabel != null && !transLabel.isBlank()) rel.put("name", transLabel);
+                    rel.put("source", reference(source, ids));
+                    rel.put("target", reference(target, ids));
+                    relations.add(rel);
+                }
+            } else if (element instanceof SatisfyRequirementUsage sat) {
+                Element source = sat.getSatisfyingFeature();
+                Element target = sat.getSatisfiedRequirement();
+                if (source != null && target != null) {
+                    Map<String, Object> rel = new LinkedHashMap<>();
+                    rel.put("id", "r" + relations.size());
+                    rel.put("kind", "SatisfyRequirementUsage");
+                    rel.put("semantic_id", ids.get(element));
+                    if (sat.getDeclaredName() != null) rel.put("name", sat.getDeclaredName());
+                    rel.put("source", reference(source, ids));
+                    rel.put("target", reference(target, ids));
+                    relations.add(rel);
+                }
+            } else if (element instanceof VerificationCaseUsage ver) {
+                for (RequirementUsage req : ver.getVerifiedRequirement()) {
+                    if (req == null) continue;
+                    Map<String, Object> rel = new LinkedHashMap<>();
+                    rel.put("id", "r" + relations.size());
+                    rel.put("kind", "VerifyRequirement");
+                    rel.put("semantic_id", ids.get(element));
+                    if (ver.getDeclaredName() != null) rel.put("name", ver.getDeclaredName());
+                    rel.put("source", reference(ver, ids));
+                    rel.put("target", reference(req, ids));
+                    relations.add(rel);
                 }
             }
         }
@@ -168,6 +305,40 @@ public final class ValidatorMain {
         if (element instanceof Relationship relationship && relationship.isImplied()) return;
         var node = NodeModelUtils.getNode(element);
         if (node != null && node.getLength() > 0) elements.add(element);
+    }
+
+    private static String nodeText(Element element) {
+        if (element == null) return null;
+        ICompositeNode node = NodeModelUtils.getNode(element);
+        if (node == null) return null;
+        String text = NodeModelUtils.getTokenText(node);
+        return text == null ? null : text.trim().replaceAll("\\s+", " ");
+    }
+
+    private static String buildTransitionLabel(TransitionUsage trans) {
+        List<String> parts = new ArrayList<>();
+        if (trans.getTriggerAction() != null && !trans.getTriggerAction().isEmpty()) {
+            String trig = nodeText(trans.getTriggerAction().get(0));
+            if (trig != null && !trig.isEmpty()) {
+                trig = trig.replaceFirst("^accept\\s+", "").trim();
+                parts.add(trig);
+            }
+        }
+        if (trans.getGuardExpression() != null && !trans.getGuardExpression().isEmpty()) {
+            String guard = nodeText(trans.getGuardExpression().get(0));
+            if (guard != null && !guard.isEmpty()) {
+                parts.add("[" + guard + "]");
+            }
+        }
+        if (trans.getEffectAction() != null && !trans.getEffectAction().isEmpty()) {
+            String eff = nodeText(trans.getEffectAction().get(0));
+            if (eff != null && !eff.isEmpty()) {
+                eff = eff.replaceFirst("^do\\s+", "").trim();
+                parts.add("/ " + eff);
+            }
+        }
+        if (!parts.isEmpty()) return String.join(" ", parts);
+        return trans.getDeclaredName();
     }
 
     private static Map<String, Object> reference(Element element, Map<Element, String> ids) {
