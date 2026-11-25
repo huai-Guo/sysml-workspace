@@ -7,6 +7,7 @@ import type {
   CanvasThemeId,
   ViewType,
   SourceLocation,
+  NodeLayoutPosition,
 } from "./types";
 import { resolveTheme, type ThemeStyles } from "./themes";
 import { LayoutSidecar } from "./sidecar";
@@ -17,15 +18,12 @@ import {
   buildNodeAttrs,
   buildPortItems,
 } from "./shapes";
-import { CanvasRulers } from "./rulers";
-import { CadStatusBar, type StatusBarState } from "./status_bar";
 import { CadBoxSelection } from "./selection";
 import { CadLayersPanel } from "./layers_panel";
 import { SysMLPalette, type InsertElementEvent } from "./palette";
 import { SemanticEditor } from "./semantic_editor";
-import { DxfExporter, DrawioExporter, JsonExporter, SvgExporter, ImageExporter, type DxfExportOptions } from "./exporters";
+import { DrawioExporter, JsonExporter, SvgExporter, ImageExporter } from "./exporters";
 import { CanvasImporter, type ImportResult } from "./importers";
-import { CadCommandBar } from "./command_bar";
 
 export interface CanvasEngineOptions {
   theme?: CanvasThemeId;
@@ -45,21 +43,16 @@ export class SysMLCanvasEngine {
   private themeId: CanvasThemeId = "auto";
   private currentThemeStyles: ThemeStyles;
   private onSelect?: (loc?: SourceLocation) => void;
-  private sheetFrameEl?: HTMLElement;
   private onKeyDownHandler!: (e: KeyboardEvent) => void;
   private onKeyUpHandler!: (e: KeyboardEvent) => void;
-  private onPointerMoveHandler!: (e: PointerEvent) => void;
   private spaceDown = false;
-  private sheetVisible = false;
   private orthoEnabled = true;
 
   private getSourceCallback?: () => string;
   private applySourceCallback?: (newSource: string, skipConfirm?: boolean) => void;
   private showNoticeCallback?: (message: string) => void;
 
-  // CAD Precision Modules
-  public rulers?: CanvasRulers;
-  public statusBar?: CadStatusBar;
+  // Controls & Plugins
   public boxSelection?: CadBoxSelection;
   public layersPanel?: CadLayersPanel;
   public palette?: SysMLPalette;
@@ -69,13 +62,22 @@ export class SysMLCanvasEngine {
   public miniMapPlugin?: MiniMap;
   public selectionPlugin?: Selection;
   public transformPlugin?: Transform;
-  public commandBar?: CadCommandBar;
+
+  // R5 UI Components & State
+  private zoomCapsuleEl?: HTMLElement;
+  private breadcrumbsEl?: HTMLElement;
+  private resizeObserver?: ResizeObserver;
+  private rafLODId: number | null = null;
+  public currentScale = 1.0;
+  public currentLODTier: "macro" | "meso" | "micro" = "meso";
+  public collapsedNodes: Set<string> = new Set();
+  private preCollapseSizes = new Map<string, { width: number; height: number }>();
+  public drillPath: string[] = []; // Subsystem drill-down hierarchy
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
     this.container = container;
     this.themeId = options.theme || "auto";
     this.currentThemeStyles = resolveTheme(this.themeId);
-    this.sheetVisible = this.currentThemeStyles.isIso;
     this.onSelect = options.onSelect;
     this.sidecar = new LayoutSidecar(options.sessionKey || "default");
     this.getSourceCallback = options.getSource;
@@ -89,9 +91,6 @@ export class SysMLCanvasEngine {
     if (!graphMount) {
       graphMount = document.createElement("div");
       graphMount.className = "x6-graph-mount";
-      graphMount.style.width = "100%";
-      graphMount.style.height = "100%";
-      graphMount.style.position = "relative";
       container.appendChild(graphMount);
     }
 
@@ -120,54 +119,56 @@ export class SysMLCanvasEngine {
       },
       mousewheel: {
         enabled: true,
-        zoomAtMousePosition: true,
-        minScale: 0.1,
-        maxScale: 3.5,
+        modifiers: ["ctrl", "meta"],
+        minScale: 0.2,
+        maxScale: 3.0,
       },
       grid: {
         visible: true,
         type: "dot",
-        size: 10,
         args: {
           color: this.currentThemeStyles.gridColor,
           thickness: 1,
         },
       },
       connecting: {
-        router: {
-          name: "manhattan",
-          args: {
-            padding: 12,
-            step: 10,
-          },
-        },
-        connector: {
-          name: "jumpover",
-          args: {
-            type: "arc",
-            size: 6,
-          },
-        },
-        anchor: "center",
-        connectionPoint: "boundary",
+        snap: { radius: 18 },
         allowBlank: false,
         allowLoop: false,
-        allowMulti: true,
         highlight: true,
-      },
-      interacting: {
-        nodeMovable: true,
-        edgeMovable: false,
-        edgeLabelMovable: true,
-        vertexMovable: true,
-        vertexAddable: true,
-        vertexDeletable: true,
+        connector: {
+          name: "jumpover",
+          args: { type: "arc", size: 6 },
+        },
+        router: {
+          name: "manhattan",
+          args: { padding: 12, step: 10 },
+        },
+        createEdge: () => {
+          return this.graph.createEdge({
+            shape: "edge",
+            router: { name: "manhattan", args: { padding: 12, step: 10 } },
+            connector: { name: "jumpover", args: { type: "arc", size: 6 } },
+            attrs: {
+              line: {
+                stroke: this.currentThemeStyles.edge.connectionStroke,
+                strokeWidth: 1.5,
+                targetMarker: {
+                  name: "classic",
+                  size: 7,
+                  fill: this.currentThemeStyles.edge.connectionStroke,
+                  stroke: this.currentThemeStyles.edge.connectionStroke,
+                },
+              },
+            },
+          });
+        },
       },
     });
 
     // 1. Initialize X6 Plugins
     try {
-      this.snaplinePlugin = new Snapline({ enabled: true, sharp: true, tolerance: 10 });
+      this.snaplinePlugin = new Snapline({ enabled: true });
       this.graph.use(this.snaplinePlugin);
     } catch (e) {
       console.warn("Snapline plugin init warning:", e);
@@ -184,8 +185,8 @@ export class SysMLCanvasEngine {
       this.selectionPlugin = new Selection({
         enabled: true,
         multiple: true,
+        rubberband: false,
         showNodeSelectionBox: true,
-        movable: true,
       });
       this.graph.use(this.selectionPlugin);
     } catch (e) {
@@ -196,7 +197,7 @@ export class SysMLCanvasEngine {
       this.transformPlugin = new Transform({
         resizing: {
           enabled: true,
-          minWidth: 40,
+          minWidth: 80,
           minHeight: 30,
         },
       });
@@ -211,53 +212,20 @@ export class SysMLCanvasEngine {
       if (!minimapMount) {
         minimapMount = document.createElement("div");
         minimapMount.className = "cad-minimap-container";
-        minimapMount.style.position = "absolute";
-        minimapMount.style.bottom = "32px";
-        minimapMount.style.right = "10px";
-        minimapMount.style.width = "160px";
-        minimapMount.style.height = "100px";
-        minimapMount.style.backgroundColor = "var(--bg-card, #131b26)";
-        minimapMount.style.border = "1px solid var(--border-subtle, #273549)";
-        minimapMount.style.borderRadius = "4px";
-        minimapMount.style.boxShadow = "0 4px 16px rgba(0, 0, 0, 0.4)";
-        minimapMount.style.zIndex = "14";
-        minimapMount.style.overflow = "hidden";
         container.appendChild(minimapMount);
       }
       this.miniMapPlugin = new MiniMap({
         container: minimapMount,
-        width: 160,
-        height: 100,
-        padding: 8,
+        width: 140,
+        height: 90,
+        padding: 6,
       });
       this.graph.use(this.miniMapPlugin);
     } catch (e) {
       console.warn("MiniMap plugin init warning:", e);
     }
 
-    // 2. Initialize R2 CAD Precision Controls
-    try {
-      this.rulers = new CanvasRulers(container, this.graph);
-    } catch (e) {
-      console.warn("Rulers init warning:", e);
-    }
-
-    try {
-      this.statusBar = new CadStatusBar(container, {
-        initialState: {
-          grid: true,
-          snap: false,
-          osnap: true,
-          ortho: true,
-          sheet: this.sheetVisible,
-        },
-        onChange: (st) => this.handleStatusBarStateChange(st),
-        onZoomReset: () => this.graph.zoomTo(1),
-      });
-    } catch (e) {
-      console.warn("Status bar init warning:", e);
-    }
-
+    // 2. Initialize Selection & Popovers
     try {
       this.boxSelection = new CadBoxSelection(container, this.graph);
     } catch (e) {
@@ -265,9 +233,7 @@ export class SysMLCanvasEngine {
     }
 
     try {
-      this.layersPanel = new CadLayersPanel(container, this.graph, this.sidecar, {
-        onSheetToggle: (visible) => this.toggleSheetFrame(visible),
-      });
+      this.layersPanel = new CadLayersPanel(container, this.graph, this.sidecar);
     } catch (e) {
       console.warn("Layers panel init warning:", e);
     }
@@ -292,65 +258,121 @@ export class SysMLCanvasEngine {
       console.warn("Palette init warning:", e);
     }
 
-    // 4. Initialize CAD Command Bar
-    try {
-      this.commandBar = new CadCommandBar(container, {
-        zoomFit: () => this.zoomFit(),
-        toggleOrtho: () => this.toggleOrtho(),
-        toggleGrid: () => this.toggleGrid(),
-        toggleSnap: () => this.toggleSnap(),
-        toggleOsnap: () => this.toggleOsnap(),
-        toggleSheet: () => this.toggleSheet(),
-        alignSelected: (type) => this.alignSelected(type),
-        resetLayout: () => this.resetLayout(),
-        switchView: (v) => this.switchView(v),
-        setTheme: (t) => this.setTheme(t),
-        exportFormat: (fmt) => this.triggerExport(fmt),
-        showNotice: (msg) => this.showNoticeCallback?.(msg),
-      });
-    } catch (e) {
-      console.warn("Command bar init warning:", e);
-    }
+    // 4. Render R5 UI Components
+    this.renderZoomCapsule();
+    this.renderBreadcrumbs();
+    this.setupResizeObserver();
 
     this.applyThemeStyles();
     this.bindEvents();
   }
 
-  private handleStatusBarStateChange(state: StatusBarState): void {
-    // GRID
-    if (state.grid) {
-      this.graph.showGrid();
-    } else {
-      this.graph.hideGrid();
-    }
+  private renderZoomCapsule(): void {
+    this.zoomCapsuleEl?.remove();
+    const cap = document.createElement("div");
+    cap.className = "canvas-zoom-capsule";
 
-    // SNAP (10px grid snap)
-    this.graph.setGridSize(state.snap ? 10 : 1);
+    const btnOut = document.createElement("button");
+    btnOut.className = "zoom-cap-btn";
+    btnOut.textContent = "−";
+    btnOut.title = "缩小视图";
+    btnOut.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomOut();
+    };
 
-    // OSNAP (Snapline guide)
-    if (state.osnap) {
-      this.snaplinePlugin?.enable();
-    } else {
-      this.snaplinePlugin?.disable();
-    }
+    const txt = document.createElement("span");
+    txt.className = "zoom-cap-text";
+    txt.textContent = `${Math.round(this.currentScale * 100)}%`;
+    txt.title = "点击恢复 100% 原始比例";
+    txt.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomReset();
+    };
 
-    // ORTHO (F8 lock)
-    this.orthoEnabled = state.ortho;
-    for (const edge of this.graph.getEdges()) {
-      edge.setRouter(
-        this.orthoEnabled
-          ? { name: "manhattan", args: { padding: 12, step: 10 } }
-          : { name: "normal" },
-      );
-    }
+    const btnIn = document.createElement("button");
+    btnIn.className = "zoom-cap-btn";
+    btnIn.textContent = "＋";
+    btnIn.title = "放大视图";
+    btnIn.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomIn();
+    };
 
-    // SHEET
-    this.toggleSheetFrame(state.sheet);
+    const btnFit = document.createElement("button");
+    btnFit.className = "zoom-cap-btn fit";
+    btnFit.textContent = "适应窗口";
+    btnFit.title = "缩放以完整适应视口";
+    btnFit.onclick = (e) => {
+      e.stopPropagation();
+      this.zoomFit();
+    };
+
+    cap.append(btnOut, txt, btnIn, btnFit);
+    this.container.appendChild(cap);
+    this.zoomCapsuleEl = cap;
   }
 
-  public toggleSheetFrame(visible?: boolean): void {
-    this.sheetVisible = visible !== undefined ? visible : !this.sheetVisible;
-    this.renderOrUpdateIsoFrame();
+  private renderBreadcrumbs(): void {
+    this.breadcrumbsEl?.remove();
+    const breadcrumbs = document.createElement("div");
+    breadcrumbs.className = "canvas-breadcrumbs";
+
+    const rootCrumb = document.createElement("span");
+    rootCrumb.className = `crumb-item ${this.drillPath.length === 0 ? "active" : ""}`;
+    rootCrumb.textContent = "🏠 全局视图";
+    rootCrumb.onclick = () => {
+      if (this.drillPath.length > 0) {
+        this.drillPath = [];
+        this.renderBreadcrumbs();
+        this.applyDrillFilter();
+        this.zoomFit();
+      }
+    };
+    breadcrumbs.appendChild(rootCrumb);
+
+    for (let i = 0; i < this.drillPath.length; i++) {
+      const sep = document.createElement("span");
+      sep.className = "crumb-separator";
+      sep.textContent = "/";
+      breadcrumbs.appendChild(sep);
+
+      const targetId = this.drillPath[i];
+      const targetNode = this.currentViewIR?.nodes.find((n) => n.id === targetId);
+      const label = targetNode ? targetNode.name : targetId;
+
+      const crumb = document.createElement("span");
+      const isLast = i === this.drillPath.length - 1;
+      crumb.className = `crumb-item ${isLast ? "active" : ""}`;
+      crumb.textContent = label;
+      crumb.onclick = () => {
+        if (!isLast) {
+          this.drillPath = this.drillPath.slice(0, i + 1);
+          this.renderBreadcrumbs();
+          this.applyDrillFilter();
+          this.zoomFit();
+        }
+      };
+      breadcrumbs.appendChild(crumb);
+    }
+
+    this.container.appendChild(breadcrumbs);
+    this.breadcrumbsEl = breadcrumbs;
+  }
+
+  private setupResizeObserver(): void {
+    let resizeTimer: any;
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (this.currentViewIR && this.hasRenderedView()) {
+            this.zoomFit();
+          }
+        }, 150);
+      });
+      this.resizeObserver.observe(this.container);
+    }
   }
 
   private bindEvents(): void {
@@ -369,6 +391,11 @@ export class SysMLCanvasEngine {
         },
         this.currentViewIR?.viewType,
       );
+      this.handleChildNodeMovedOrResized(node);
+    });
+
+    this.graph.on("node:moving", ({ node }) => {
+      this.handleChildNodeMovedOrResized(node);
     });
 
     this.graph.on("node:resized", ({ node }) => {
@@ -385,23 +412,42 @@ export class SysMLCanvasEngine {
         },
         this.currentViewIR?.viewType,
       );
+      this.handleChildNodeMovedOrResized(node);
     });
 
-    // Node click to toggle compartment fold or highlight source location in CodeMirror
+    // Node click handlers: collapseBtn, drillBtn, foldBtn, or source location selection
     this.graph.on("node:click", ({ node, e }) => {
       const target = e.target as SVGElement;
-      const isFoldBtn =
-        target?.getAttribute?.("data-selector") === "foldBtn" ||
-        target?.textContent === "▾" ||
-        target?.textContent === "▸";
+      const selector = target?.getAttribute?.("data-selector");
+      const text = target?.textContent?.trim();
 
+      // 1. Collapse button clicked ([-] / [+])
+      if (selector === "collapseBtn" || text === "[-]" || text === "[+]") {
+        this.toggleNodeCollapse(node.id);
+        return;
+      }
+
+      // 2. Drill button clicked (⤢)
+      if (selector === "drillBtn" || text === "⤢") {
+        this.drillDown(node.id);
+        return;
+      }
+
+      // 3. Compartment fold button (▾ / ▸)
+      const isFoldBtn = selector === "foldBtn" || text === "▾" || text === "▸";
       if (isFoldBtn) {
         const data = node.getData() as
           | { viewNode?: SysMLViewNode; sourceLocation?: SourceLocation }
           | undefined;
         if (data?.viewNode && data.viewNode.compartments?.length > 0) {
           data.viewNode.collapsed = !data.viewNode.collapsed;
-          const newAttrs = buildNodeAttrs(data.viewNode, this.currentThemeStyles);
+          const newAttrs = buildNodeAttrs(data.viewNode, this.currentThemeStyles, {
+            depth: this.calculateNodeDepth(data.viewNode),
+            isCompound: this.isCompoundNode(data.viewNode.id),
+            isCollapsed: this.collapsedNodes.has(node.id),
+            lodTier: this.currentLODTier,
+            scale: this.currentScale,
+          });
           node.setAttrs(newAttrs as any);
 
           const curSize = node.getSize();
@@ -430,26 +476,28 @@ export class SysMLCanvasEngine {
         }
       }
 
+      // Highlight source in editor
       const data = node.getData() as { sourceLocation?: SourceLocation } | undefined;
       if (data && data.sourceLocation && this.onSelect) {
         this.onSelect(data.sourceLocation);
       }
     });
 
-    // Realtime cursor world coordinate tracking (clientToLocal accepts clientX, clientY directly)
-    this.onPointerMoveHandler = (e: PointerEvent) => {
-      const localPos = this.graph.clientToLocal(e.clientX, e.clientY);
-      this.statusBar?.setCoordinates(localPos.x, localPos.y);
-    };
-    this.container.addEventListener("pointermove", this.onPointerMoveHandler);
-
-    this.graph.on("scale", ({ sx }) => {
-      this.statusBar?.setZoom(sx);
-      this.rulers?.draw();
+    // Double-click on compound container title triggers drill-down
+    this.graph.on("node:dblclick", ({ node }) => {
+      if (this.isCompoundNode(node.id)) {
+        this.drillDown(node.id);
+      }
     });
 
-    this.graph.on("translate", () => {
-      this.rulers?.draw();
+    // 3-Tier Semantic Zoom LOD throttled via requestAnimationFrame
+    this.graph.on("scale", ({ sx }) => {
+      this.currentScale = sx;
+      if (this.zoomCapsuleEl) {
+        const txt = this.zoomCapsuleEl.querySelector(".zoom-cap-text");
+        if (txt) txt.textContent = `${Math.round(sx * 100)}%`;
+      }
+      this.handleScaleEvent(sx);
     });
 
     // Keyboard shortcuts handler:
@@ -457,7 +505,6 @@ export class SysMLCanvasEngine {
     // - Ctrl+Z: Undo
     // - Ctrl+Y / Ctrl+Shift+Z: Redo
     // - Delete / Backspace: Safe delete
-    // - F8: Ortho toggle
     this.onKeyDownHandler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
@@ -482,9 +529,6 @@ export class SysMLCanvasEngine {
       } else if (!isInput && (e.key === "Delete" || e.key === "Backspace")) {
         e.preventDefault();
         this.semanticEditor?.handleDeleteSelected();
-      } else if (e.key === "F8") {
-        e.preventDefault();
-        this.statusBar?.toggleMode("ortho");
       }
     };
 
@@ -499,6 +543,276 @@ export class SysMLCanvasEngine {
     window.addEventListener("keyup", this.onKeyUpHandler);
   }
 
+  // --- R5.2 真·大图套小图 (Auto-Fit Bounds, Collapse & Drill-Down) ---
+
+  private handleChildNodeMovedOrResized(childCell: Node): void {
+    const data = childCell.getData() as { viewNode?: SysMLViewNode } | undefined;
+    const parentId = data?.viewNode?.parentId;
+    if (!parentId) return;
+
+    this.updateParentBounds(parentId);
+  }
+
+  public updateParentBounds(parentId: string): void {
+    const parentCell = this.graph.getCellById(parentId) as Node;
+    if (!parentCell || !parentCell.isNode()) return;
+
+    // Collect all direct children of this parent
+    const children = this.graph.getNodes().filter((n) => {
+      const d = n.getData() as { viewNode?: SysMLViewNode } | undefined;
+      return d?.viewNode?.parentId === parentId && n.isVisible();
+    });
+
+    if (children.length === 0) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const child of children) {
+      const pos = child.getPosition();
+      const size = child.getSize();
+      minX = Math.min(minX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxX = Math.max(maxX, pos.x + size.width);
+      maxY = Math.max(maxY, pos.y + size.height);
+    }
+
+    const parentPos = parentCell.getPosition();
+    const parentSize = parentCell.getSize();
+
+    const pViewNode = (parentCell.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+    let compHeight = 0;
+    if (pViewNode?.compartments) {
+      for (const comp of pViewNode.compartments) {
+        compHeight += 24 + comp.items.length * 18;
+      }
+    }
+    const topPadding = Math.max(56, 44 + compHeight + 20);
+    const pad = 28;
+
+    const desiredX = Math.min(parentPos.x, minX - pad);
+    const desiredY = Math.min(parentPos.y, minY - topPadding);
+    const desiredRight = Math.max(parentPos.x + parentSize.width, maxX + pad);
+    const desiredBottom = Math.max(parentPos.y + parentSize.height, maxY + pad);
+
+    const newW = desiredRight - desiredX;
+    const newH = desiredBottom - desiredY;
+
+    if (desiredX !== parentPos.x || desiredY !== parentPos.y) {
+      parentCell.setPosition(desiredX, desiredY);
+    }
+    if (newW !== parentSize.width || newH !== parentSize.height) {
+      parentCell.setSize(newW, newH);
+    }
+
+    // Recursively update grandparent
+    const grandParentId = pViewNode?.parentId;
+    if (grandParentId) {
+      this.updateParentBounds(grandParentId);
+    }
+  }
+
+  public toggleNodeCollapse(nodeId: string): void {
+    const parentCell = this.graph.getCellById(nodeId) as Node;
+    if (!parentCell || !parentCell.isNode()) return;
+
+    const descendantIds = this.getDescendantNodeIds(nodeId);
+    const isNowCollapsed = !this.collapsedNodes.has(nodeId);
+
+    if (isNowCollapsed) {
+      this.collapsedNodes.add(nodeId);
+      this.preCollapseSizes.set(nodeId, parentCell.getSize());
+
+      // Shrink container to compact card
+      parentCell.setSize(Math.min(parentCell.getSize().width, 220), 44);
+      parentCell.attr("collapseBtn/text", "[+]");
+
+      // Hide all descendant nodes and connected descendant edges
+      for (const dId of descendantIds) {
+        const dCell = this.graph.getCellById(dId);
+        if (dCell) dCell.hide();
+      }
+    } else {
+      this.collapsedNodes.delete(nodeId);
+      const prev = this.preCollapseSizes.get(nodeId);
+      if (prev) {
+        parentCell.setSize(prev.width, prev.height);
+      }
+      parentCell.attr("collapseBtn/text", "[-]");
+
+      // Show all descendant nodes
+      for (const dId of descendantIds) {
+        const dCell = this.graph.getCellById(dId);
+        if (dCell) dCell.show();
+      }
+      this.updateParentBounds(nodeId);
+    }
+  }
+
+  public drillDown(nodeId: string): void {
+    if (!this.drillPath.includes(nodeId)) {
+      this.drillPath.push(nodeId);
+    }
+    this.renderBreadcrumbs();
+    this.applyDrillFilter();
+    this.zoomFit();
+  }
+
+  public drillUp(): void {
+    if (this.drillPath.length > 0) {
+      this.drillPath.pop();
+      this.renderBreadcrumbs();
+      this.applyDrillFilter();
+      this.zoomFit();
+    }
+  }
+
+  private applyDrillFilter(): void {
+    if (this.drillPath.length === 0) {
+      // Show all nodes
+      for (const cell of this.graph.getCells()) {
+        cell.show();
+      }
+      return;
+    }
+
+    const currentFocusId = this.drillPath[this.drillPath.length - 1];
+    const visibleIds = new Set<string>([currentFocusId, ...this.getDescendantNodeIds(currentFocusId)]);
+
+    for (const node of this.graph.getNodes()) {
+      if (visibleIds.has(node.id)) {
+        node.show();
+      } else {
+        node.hide();
+      }
+    }
+
+    for (const edge of this.graph.getEdges()) {
+      const src = edge.getSourceCellId();
+      const tgt = edge.getTargetCellId();
+      if (visibleIds.has(src) && visibleIds.has(tgt)) {
+        edge.show();
+      } else {
+        edge.hide();
+      }
+    }
+  }
+
+  private getDescendantNodeIds(parentId: string): string[] {
+    const result: string[] = [];
+    const queue = [parentId];
+    const nodes = this.currentViewIR?.nodes || [];
+
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const children = nodes.filter((n) => n.parentId === curr);
+      for (const child of children) {
+        result.push(child.id);
+        queue.push(child.id);
+      }
+    }
+
+    return result;
+  }
+
+  private isCompoundNode(nodeId: string): boolean {
+    return (this.currentViewIR?.nodes || []).some((n) => n.parentId === nodeId);
+  }
+
+  private calculateNodeDepth(node: SysMLViewNode): number {
+    let depth = 0;
+    let curr = node.parentId;
+    const map = new Map<string, SysMLViewNode>();
+    for (const n of this.currentViewIR?.nodes || []) {
+      map.set(n.id, n);
+    }
+    while (curr && map.has(curr)) {
+      depth++;
+      curr = map.get(curr)!.parentId;
+    }
+    return depth;
+  }
+
+  // --- R5.3 多比例尺语义缩放适配 (3-Tier Semantic Zoom LOD) ---
+
+  private handleScaleEvent(scale: number): void {
+    if (this.rafLODId !== null) return;
+    this.rafLODId = requestAnimationFrame(() => {
+      this.rafLODId = null;
+      this.applyLOD(scale);
+    });
+  }
+
+  public applyLOD(scale: number): void {
+    let tier: "macro" | "meso" | "micro" = "meso";
+    if (scale < 0.55) {
+      tier = "macro";
+    } else if (scale > 1.25) {
+      tier = "micro";
+    }
+
+    this.currentLODTier = tier;
+    const theme = this.currentThemeStyles;
+
+    // Macro tier: inverse font compensation on title, stroke width compensation, hide compartments
+    const compTitleSize = tier === "macro" ? Math.min(26, Math.round(13 / Math.max(scale, 0.35))) : 13;
+    const compStrokeWidth = tier === "macro" ? Math.min(4, Math.max(1.5, 1.5 / Math.max(scale, 0.5))) : 1.5;
+
+    for (const node of this.graph.getNodes()) {
+      const data = node.getData() as { viewNode?: SysMLViewNode } | undefined;
+      const vn = data?.viewNode;
+      if (!vn) continue;
+
+      const isCompound = this.isCompoundNode(vn.id);
+      const isCollapsed = this.collapsedNodes.has(vn.id);
+
+      node.attr("title/fontSize", compTitleSize);
+      node.attr("body/strokeWidth", compStrokeWidth);
+
+      if (tier === "macro") {
+        node.attr("compartments/display", "none");
+        node.attr("divider/display", "none");
+        node.attr("stereotype/display", "none");
+      } else {
+        const hasComps = vn.compartments && vn.compartments.length > 0;
+        node.attr("compartments/display", hasComps && !vn.collapsed && !isCollapsed ? "block" : "none");
+        node.attr("divider/display", hasComps && !vn.collapsed && !isCollapsed ? "block" : "none");
+        node.attr("stereotype/display", "block");
+      }
+
+      // Port labels
+      for (const port of vn.ports || []) {
+        if (tier === "macro") {
+          node.portProp(port.id, "attrs/text/display", "none");
+        } else {
+          node.portProp(port.id, "attrs/text/display", "block");
+          if (tier === "micro") {
+            const dirSymbol = port.direction === "in" ? "▶" : port.direction === "out" ? "◀" : port.direction === "inout" ? "◆" : "▫";
+            const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
+            node.portProp(port.id, "attrs/text/text", `${dirSymbol} ${port.name}${typeSuffix}`);
+          }
+        }
+      }
+    }
+
+    // Grid compensation
+    if (tier === "macro") {
+      this.graph.drawGrid({
+        type: "mesh",
+        args: { color: theme.gridColor, thickness: 0.5 },
+      });
+    } else {
+      this.graph.drawGrid({
+        type: "dot",
+        args: { color: theme.gridColor, thickness: 1 },
+      });
+    }
+  }
+
+  // --- Theme & View Lifecycle ---
+
   public setScope(sessionKey: string): void {
     this.sidecar.setScope(sessionKey);
   }
@@ -506,8 +820,6 @@ export class SysMLCanvasEngine {
   public setTheme(themeId: CanvasThemeId): void {
     this.themeId = themeId;
     this.currentThemeStyles = resolveTheme(themeId);
-    this.sheetVisible = this.currentThemeStyles.isIso;
-    this.statusBar?.updateState({ sheet: this.sheetVisible });
     this.applyThemeStyles();
     if (this.currentViewIR) {
       this.refreshNodeAndEdgeStyles();
@@ -520,7 +832,7 @@ export class SysMLCanvasEngine {
 
   private applyThemeStyles(): void {
     const theme = this.currentThemeStyles;
-    this.container.style.backgroundColor = theme.canvasBg;
+    this.container.setAttribute("data-canvas-theme", this.themeId);
 
     if (theme.gridColor && theme.gridColor !== "transparent") {
       this.graph.showGrid();
@@ -531,162 +843,6 @@ export class SysMLCanvasEngine {
     } else {
       this.graph.hideGrid();
     }
-
-    this.renderOrUpdateIsoFrame();
-  }
-
-  private renderOrUpdateIsoFrame(): void {
-    const existing = this.container.querySelector(".iso-sheet-frame");
-    if (existing) existing.remove();
-
-    if (!this.sheetVisible || !this.currentViewIR) return;
-
-    const frame = document.createElement("div");
-    frame.className = "iso-sheet-frame";
-    frame.style.position = "absolute";
-    frame.style.inset = "6px";
-    frame.style.border = "2px solid #000000";
-    frame.style.pointerEvents = "none";
-    frame.style.boxSizing = "border-box";
-    frame.style.zIndex = "5";
-
-    // Inner margin frame
-    const inner = document.createElement("div");
-    inner.style.position = "absolute";
-    inner.style.inset = "18px";
-    inner.style.border = "1px solid #000000";
-
-    // Top & Bottom Zone Labels: 1 through 8
-    const topZones = document.createElement("div");
-    topZones.style.position = "absolute";
-    topZones.style.top = "0";
-    topZones.style.left = "18px";
-    topZones.style.right = "18px";
-    topZones.style.height = "18px";
-    topZones.style.display = "flex";
-    topZones.style.justifyContent = "space-around";
-    topZones.style.alignItems = "center";
-    topZones.style.fontSize = "9px";
-    topZones.style.fontFamily = "ui-monospace, monospace";
-    topZones.style.color = "#000000";
-
-    const botZones = document.createElement("div");
-    botZones.style.position = "absolute";
-    botZones.style.bottom = "0";
-    botZones.style.left = "18px";
-    botZones.style.right = "298px"; // avoid overlapping title block
-    botZones.style.height = "18px";
-    botZones.style.display = "flex";
-    botZones.style.justifyContent = "space-around";
-    botZones.style.alignItems = "center";
-    botZones.style.fontSize = "9px";
-    botZones.style.fontFamily = "ui-monospace, monospace";
-    botZones.style.color = "#000000";
-
-    for (let i = 1; i <= 8; i++) {
-      const sp1 = document.createElement("span");
-      sp1.textContent = String(i);
-      topZones.appendChild(sp1);
-
-      const sp2 = document.createElement("span");
-      sp2.textContent = String(i);
-      botZones.appendChild(sp2);
-    }
-    frame.appendChild(topZones);
-    frame.appendChild(botZones);
-
-    // Left & Right Zone Labels: A through F
-    const leftZones = document.createElement("div");
-    leftZones.style.position = "absolute";
-    leftZones.style.left = "0";
-    leftZones.style.top = "18px";
-    leftZones.style.bottom = "18px";
-    leftZones.style.width = "18px";
-    leftZones.style.display = "flex";
-    leftZones.style.flexDirection = "column";
-    leftZones.style.justifyContent = "space-around";
-    leftZones.style.alignItems = "center";
-    leftZones.style.fontSize = "9px";
-    leftZones.style.fontFamily = "ui-monospace, monospace";
-    leftZones.style.color = "#000000";
-
-    const rightZones = document.createElement("div");
-    rightZones.style.position = "absolute";
-    rightZones.style.right = "0";
-    rightZones.style.top = "18px";
-    rightZones.style.bottom = "93px"; // avoid title block
-    rightZones.style.width = "18px";
-    rightZones.style.display = "flex";
-    rightZones.style.flexDirection = "column";
-    rightZones.style.justifyContent = "space-around";
-    rightZones.style.alignItems = "center";
-    rightZones.style.fontSize = "9px";
-    rightZones.style.fontFamily = "ui-monospace, monospace";
-    rightZones.style.color = "#000000";
-
-    const zoneLetters = ["A", "B", "C", "D", "E", "F"];
-    for (const letter of zoneLetters) {
-      const spL = document.createElement("span");
-      spL.textContent = letter;
-      leftZones.appendChild(spL);
-
-      const spR = document.createElement("span");
-      spR.textContent = letter;
-      rightZones.appendChild(spR);
-    }
-    frame.appendChild(leftZones);
-    frame.appendChild(rightZones);
-
-    // Safe DOM construction for Title Block (bottom-right)
-    const titleBlock = document.createElement("div");
-    titleBlock.style.position = "absolute";
-    titleBlock.style.bottom = "0";
-    titleBlock.style.right = "0";
-    titleBlock.style.width = "280px";
-    titleBlock.style.height = "75px";
-    titleBlock.style.borderTop = "1px solid #000000";
-    titleBlock.style.borderLeft = "1px solid #000000";
-    titleBlock.style.backgroundColor = "rgba(255, 255, 255, 0.95)";
-    titleBlock.style.padding = "6px 8px";
-    titleBlock.style.fontSize = "10px";
-    titleBlock.style.fontFamily = "ui-monospace, monospace";
-    titleBlock.style.color = "#000000";
-    titleBlock.style.display = "flex";
-    titleBlock.style.flexDirection = "column";
-    titleBlock.style.justifyContent = "space-between";
-
-    const titleH = document.createElement("div");
-    titleH.style.fontWeight = "bold";
-    titleH.style.fontSize = "11px";
-    titleH.textContent = `${this.currentViewIR.rootPackageName} · ${this.currentViewIR.viewType.toUpperCase()}`;
-    titleBlock.appendChild(titleH);
-
-    const row1 = document.createElement("div");
-    row1.style.display = "flex";
-    row1.style.justifyContent = "space-between";
-    const s1 = document.createElement("span");
-    s1.textContent = `NODES: ${this.currentViewIR.summary.displayedNodes}`;
-    const s2 = document.createElement("span");
-    s2.textContent = `EDGES: ${this.currentViewIR.summary.displayedEdges}`;
-    row1.append(s1, s2);
-    titleBlock.appendChild(row1);
-
-    const row2 = document.createElement("div");
-    row2.style.display = "flex";
-    row2.style.justifyContent = "space-between";
-    const s3 = document.createElement("span");
-    const shaShort = this.currentViewIR.sourceSha256.slice(0, 10);
-    s3.textContent = `SHA: ${shaShort}…`;
-    const s4 = document.createElement("span");
-    const dateStr = new Date().toISOString().slice(0, 10);
-    s4.textContent = dateStr;
-    row2.append(s3, s4);
-    titleBlock.appendChild(row2);
-
-    inner.appendChild(titleBlock);
-    frame.appendChild(inner);
-    this.container.appendChild(frame);
-    this.sheetFrameEl = frame;
   }
 
   public async render(
@@ -700,6 +856,8 @@ export class SysMLCanvasEngine {
 
     this.layersPanel?.setViewType(viewIR.viewType);
     this.graph.clearCells();
+    this.drillPath = [];
+    this.renderBreadcrumbs();
 
     // 1. Run ELK layout
     const elkResult = await runElkLayout(viewIR);
@@ -708,12 +866,10 @@ export class SysMLCanvasEngine {
     const nodeCells = new Map<string, Node>();
     const nodeDataMap = new Map<string, SysMLViewNode>();
 
-    // 2. Instantiate and add nodes
+    // 2. Instantiate and add nodes with depth and hierarchy awareness
     for (const node of viewIR.nodes) {
       nodeDataMap.set(node.id, node);
 
-      // Model-Layout Separation:
-      // If user previously moved this node, honor manual position from LayoutSidecar scoped by viewType!
       const sidecarPos = this.sidecar.get(node.id, viewIR.viewType);
       const elkPos = elkResult.positions.get(node.id) || {
         x: 60,
@@ -727,8 +883,21 @@ export class SysMLCanvasEngine {
       const finalWidth = sidecarPos?.width || elkPos.width;
       const finalHeight = sidecarPos?.height || elkPos.height;
 
-      const attrs = buildNodeAttrs(node, theme);
-      const portItems = buildPortItems(node, theme);
+      const depth = this.calculateNodeDepth(node);
+      const isCompound = this.isCompoundNode(node.id);
+      const isCollapsed = this.collapsedNodes.has(node.id);
+
+      const attrs = buildNodeAttrs(node, theme, {
+        depth,
+        isCompound,
+        isCollapsed,
+        lodTier: this.currentLODTier,
+        scale: this.currentScale,
+      });
+      const portItems = buildPortItems(node, theme, {
+        lodTier: this.currentLODTier,
+        scale: this.currentScale,
+      });
 
       const cell = this.graph.addNode({
         id: node.id,
@@ -737,6 +906,7 @@ export class SysMLCanvasEngine {
         y: finalY,
         width: finalWidth,
         height: finalHeight,
+        zIndex: 1 + depth * 2, // Parent strictly beneath child components
         attrs: attrs as any,
         ports: {
           items: portItems,
@@ -832,8 +1002,6 @@ export class SysMLCanvasEngine {
 
     // 5. Fit view smoothly
     this.graph.zoomToFit({ padding: 36, maxScale: 1.2 });
-    this.renderOrUpdateIsoFrame();
-    this.rulers?.draw();
   }
 
   private buildEdgeAttrs(edge: SysMLViewEdge, theme: ThemeStyles): Record<string, any> {
@@ -870,10 +1038,18 @@ export class SysMLCanvasEngine {
     for (const node of this.currentViewIR.nodes) {
       const cell = this.graph.getCellById(node.id);
       if (cell && cell.isNode()) {
-        const attrs = buildNodeAttrs(node, theme);
+        const depth = this.calculateNodeDepth(node);
+        const isCompound = this.isCompoundNode(node.id);
+        const isCollapsed = this.collapsedNodes.has(node.id);
+        const attrs = buildNodeAttrs(node, theme, {
+          depth,
+          isCompound,
+          isCollapsed,
+          lodTier: this.currentLODTier,
+          scale: this.currentScale,
+        });
         cell.setAttrs(attrs as any);
 
-        // Synchronize port styles
         for (const port of node.ports || []) {
           cell.portProp(port.id, "attrs/stub/stroke", theme.port.stroke);
           cell.portProp(port.id, "attrs/pin/fill", theme.port.fill);
@@ -908,6 +1084,10 @@ export class SysMLCanvasEngine {
     this.graph.zoom(-0.2);
   }
 
+  public zoomReset(): void {
+    this.graph.zoomTo(1.0);
+  }
+
   public zoomFit(): void {
     this.graph.zoomToFit({ padding: 36, maxScale: 1.5 });
   }
@@ -919,8 +1099,6 @@ export class SysMLCanvasEngine {
     }
   }
 
-  // --- Milestone R3: Exporters & Importers Integration ---
-
   public getCurrentPositions(): Map<string, { x: number; y: number; width: number; height: number }> {
     const map = new Map<string, { x: number; y: number; width: number; height: number }>();
     for (const node of this.graph.getNodes()) {
@@ -931,22 +1109,7 @@ export class SysMLCanvasEngine {
     return map;
   }
 
-  public exportDxf(options?: DxfExportOptions): string {
-    if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
-    const edgeVertices = new Map<string, { x: number; y: number }[]>();
-    for (const edge of this.graph.getEdges()) {
-      const vertices = edge.getVertices() || [];
-      if (vertices.length > 0) {
-        edgeVertices.set(edge.id, vertices);
-      }
-    }
-    return DxfExporter.export(this.currentViewIR, {
-      includeFrame: options?.includeFrame ?? this.sheetVisible,
-      scale: options?.scale,
-      nodePositions: this.getCurrentPositions(),
-      edgeVertices,
-    });
-  }
+  // --- Exporters & Importers Integration ---
 
   public exportDrawio(): string {
     if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
@@ -966,13 +1129,12 @@ export class SysMLCanvasEngine {
     });
   }
 
-  public exportSvg(options?: { includeFrame?: boolean }): string {
+  public exportSvg(): string {
     if (!this.currentViewIR) throw new Error("尚未生成或加载任何架构视图");
     const svgEl = this.graph.container.querySelector("svg");
     if (!svgEl) throw new Error("未找到画布对应的 SVG 矢量渲染图元");
     const src = this.getSourceCallback?.() || "";
     return SvgExporter.export(svgEl, this.currentViewIR, {
-      includeFrame: options?.includeFrame ?? this.sheetVisible,
       sysmlSource: src,
       theme: this.themeId,
       sidecarPositions: this.sidecar.toRecord(),
@@ -1026,37 +1188,8 @@ export class SysMLCanvasEngine {
     return result;
   }
 
-  // --- CAD Command Bar Action Delegators ---
-
-  public toggleOrtho(): boolean {
-    this.statusBar?.toggleMode("ortho");
-    return this.orthoEnabled;
-  }
-
-  public toggleGrid(): boolean {
-    this.statusBar?.toggleMode("grid");
-    return this.statusBar ? this.statusBar.getState().grid : true;
-  }
-
-  public toggleSnap(): boolean {
-    this.statusBar?.toggleMode("snap");
-    return this.statusBar ? this.statusBar.getState().snap : false;
-  }
-
-  public toggleOsnap(): boolean {
-    this.statusBar?.toggleMode("osnap");
-    return this.statusBar ? this.statusBar.getState().osnap : true;
-  }
-
-  public toggleSheet(): boolean {
-    this.statusBar?.toggleMode("sheet");
-    return this.sheetVisible;
-  }
-
   public alignSelected(type: "left" | "right" | "top" | "bottom" | "centerH" | "centerV"): boolean {
     if (!this.layersPanel) return false;
-    const count = this.layersPanel.getSelectedNodes().length;
-    if (count < 2) return false;
     this.layersPanel.alignSelected(type);
     return true;
   }
@@ -1065,44 +1198,14 @@ export class SysMLCanvasEngine {
     return Boolean(this.currentViewIR && this.graph.getNodes().length > 0);
   }
 
-  public async triggerExport(format: "dxf" | "drawio" | "png" | "svg" | "json"): Promise<void> {
-    const downloadBlob = (blob: Blob, filename: string) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    };
-
-    if (format === "dxf") {
-      const dxf = this.exportDxf();
-      downloadBlob(new Blob([dxf], { type: "application/dxf" }), "diagram.dxf");
-    } else if (format === "drawio") {
-      const drawio = this.exportDrawio();
-      downloadBlob(new Blob([drawio], { type: "application/vnd.jgraph.mxfile" }), "diagram.drawio");
-    } else if (format === "json") {
-      const json = this.exportWorkbenchJson();
-      downloadBlob(new Blob([json], { type: "application/json" }), "project.sysmlwb.json");
-    } else if (format === "svg") {
-      const svg = this.exportSvg();
-      downloadBlob(new Blob([svg], { type: "image/svg+xml" }), "diagram.svg");
-    } else if (format === "png") {
-      const blob = await this.exportPngBlob(2);
-      downloadBlob(blob, "diagram-2x.png");
-    }
-  }
-
   public destroy(): void {
     window.removeEventListener("keydown", this.onKeyDownHandler);
     window.removeEventListener("keyup", this.onKeyUpHandler);
-    this.container.removeEventListener("pointermove", this.onPointerMoveHandler);
 
-    this.commandBar?.dispose();
-    this.rulers?.dispose();
-    this.statusBar?.dispose();
+    this.resizeObserver?.disconnect();
+    this.zoomCapsuleEl?.remove();
+    this.breadcrumbsEl?.remove();
+
     this.boxSelection?.dispose();
     this.layersPanel?.dispose();
     this.palette?.dispose();
@@ -1113,7 +1216,6 @@ export class SysMLCanvasEngine {
     this.selectionPlugin?.dispose();
     this.transformPlugin?.dispose();
 
-    if (this.sheetFrameEl) this.sheetFrameEl.remove();
     this.graph.dispose();
   }
 }

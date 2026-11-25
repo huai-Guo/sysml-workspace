@@ -257,26 +257,27 @@
                     <span id="diagram-summary" class="diagram-summary"></span>
                   </div>
                   <div class="diagram-controls">
-                    <button id="toggle-palette-btn" class="button ghost compact" title="显示/收起元件库 (SysML Palette)">❖ 元件库</button>
-                    <button id="toggle-layers-btn" class="button ghost compact" title="显示/收起 CAD 图层与属性面板">≡ 图层面板</button>
+                    <div class="dropdown-wrap" id="palette-dropdown-wrap">
+                      <button id="toggle-palette-btn" class="button ghost compact" title="新建 SysML 图元">❖ 新建图元 ▾</button>
+                      <div id="palette-menu-popover" class="canvas-palette-popover" hidden></div>
+                    </div>
+                    <div class="dropdown-wrap" id="layers-dropdown-wrap">
+                      <button id="toggle-layers-btn" class="button ghost compact" title="语义元素显隐过滤与对齐">≡ 过滤与对齐 ▾</button>
+                      <div id="layers-menu-popover" class="canvas-layers-popover" hidden></div>
+                    </div>
                     <select id="canvas-theme-select" class="select-compact" title="画布制图皮肤" aria-label="画布制图皮肤">
                       <option value="auto">🎨 跟随主题</option>
-                      <option value="cad-blueprint">🌌 暗黑蓝图</option>
-                      <option value="syson-clean">☀️ 清爽亮色</option>
-                      <option value="iso-drafting">📐 ISO国标图</option>
+                      <option value="cad-blueprint">🌌 深邃蓝图</option>
+                      <option value="syson-clean">☀️ 现代亮色</option>
+                      <option value="iso-drafting">📄 论文纯净黑白</option>
                     </select>
                     <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新视图">🔄 刷新</button>
                     <button id="reset-layout" class="button ghost compact" title="重置手工位置并恢复自动排版">⟲ 重排</button>
-                    <button id="zoom-out" class="icon-button" aria-label="缩小视图">−</button>
-                    <button id="zoom-fit" class="button ghost compact">适应画布</button>
-                    <button id="zoom-in" class="icon-button" aria-label="放大视图">＋</button>
-                    <button id="btn-cad-command" class="button ghost compact" title="CAD 命令行唤醒栏 (快捷键: /)">⌨ 命令行</button>
                     <button id="btn-import-diagram" class="button secondary compact" title="导入文件 (.sysml / .drawio / .json / .svg)">📥 导入</button>
                     <input id="diagram-file-input" type="file" accept=".sysml,.kerml,.drawio,.xml,.json,.svg" hidden>
                     <div class="dropdown-wrap" id="export-dropdown-wrap">
-                      <button id="btn-export-menu" class="button primary compact" title="全格式导出中心 (DXF / Draw.io / PNG / SVG / JSON)">📤 导出 ▾</button>
+                      <button id="btn-export-menu" class="button primary compact" title="全格式导出中心 (Draw.io / PNG / SVG / JSON)">📤 导出 ▾</button>
                       <div id="export-menu-popover" class="export-menu-popover" hidden>
-                        <button class="export-menu-item" data-export="dxf">📐 AutoCAD 图纸 (.dxf)</button>
                         <button class="export-menu-item" data-export="drawio">🔷 可编辑图 (.drawio)</button>
                         <button class="export-menu-item" data-export="png-2x">🖼 出版级图片 (.png 2x)</button>
                         <button class="export-menu-item" data-export="png-4x">🖼 论文超清图 (.png 4x)</button>

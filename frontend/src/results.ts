@@ -132,22 +132,17 @@ export class Results {
 
     const togglePaletteBtn = optEl<HTMLButtonElement>("toggle-palette-btn");
     if (togglePaletteBtn) {
-      togglePaletteBtn.onclick = () => {
-        this.canvasEngine?.palette?.toggleCollapse();
+      togglePaletteBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.canvasEngine?.palette?.toggle();
       };
     }
 
     const toggleLayersBtn = optEl<HTMLButtonElement>("toggle-layers-btn");
     if (toggleLayersBtn) {
-      toggleLayersBtn.onclick = () => {
-        this.canvasEngine?.layersPanel?.toggleCollapse();
-      };
-    }
-
-    const cadCmdBtn = optEl<HTMLButtonElement>("btn-cad-command");
-    if (cadCmdBtn) {
-      cadCmdBtn.onclick = () => {
-        this.canvasEngine?.commandBar?.toggle();
+      toggleLayersBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.canvasEngine?.layersPanel?.toggle();
       };
     }
 
@@ -187,10 +182,7 @@ export class Results {
 
         const type = item.dataset.export;
         try {
-          if (type === "dxf") {
-            const dxf = this.canvasEngine.exportDxf();
-            download(new Blob([dxf], { type: "application/dxf" }), "diagram.dxf");
-          } else if (type === "drawio") {
+          if (type === "drawio") {
             const drawio = this.canvasEngine.exportDrawio();
             download(new Blob([drawio], { type: "application/vnd.jgraph.mxfile" }), "diagram.drawio");
           } else if (type === "json") {
@@ -248,28 +240,37 @@ export class Results {
       };
     }
 
-    el("zoom-fit").onclick = () => {
-      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
-        this.canvasEngine.zoomFit();
-      } else {
-        this.fit = true;
-        this.resize();
-      }
-    };
-    el("zoom-in").onclick = () => {
-      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
-        this.canvasEngine.zoomIn();
-      } else {
-        this.zoom(1.3);
-      }
-    };
-    el("zoom-out").onclick = () => {
-      if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
-        this.canvasEngine.zoomOut();
-      } else {
-        this.zoom(1 / 1.3);
-      }
-    };
+    const zoomFitBtn = optEl<HTMLButtonElement>("zoom-fit");
+    if (zoomFitBtn) {
+      zoomFitBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomFit();
+        } else {
+          this.fit = true;
+          this.resize();
+        }
+      };
+    }
+    const zoomInBtn = optEl<HTMLButtonElement>("zoom-in");
+    if (zoomInBtn) {
+      zoomInBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomIn();
+        } else {
+          this.zoom(1.3);
+        }
+      };
+    }
+    const zoomOutBtn = optEl<HTMLButtonElement>("zoom-out");
+    if (zoomOutBtn) {
+      zoomOutBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomOut();
+        } else {
+          this.zoom(1 / 1.3);
+        }
+      };
+    }
     const viewport = el("diagram-viewport");
     let dragging:
       | undefined
@@ -756,7 +757,6 @@ export class Results {
     const banner = optEl("canvas-stale-banner");
     if (banner) {
       banner.hidden = !show;
-      banner.style.display = show ? "flex" : "none";
     }
   }
 }

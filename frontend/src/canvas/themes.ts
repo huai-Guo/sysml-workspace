@@ -93,18 +93,18 @@ export const THEMES: Record<"cad-blueprint" | "syson-clean" | "iso-drafting", Th
     isIso: false,
   },
   "iso-drafting": {
-    name: "ISO Technical Drawing",
+    name: "Paper Clean B&W",
     canvasBg: "#ffffff",
-    gridColor: "transparent",
+    gridColor: "#f1f5f9",
     node: {
       fill: "#ffffff",
       stroke: "#000000",
       strokeWidth: 1.5,
-      headerFill: "#ffffff",
+      headerFill: "#f8fafc",
       textPrimary: "#000000",
       textSecondary: "#222222",
       dividerColor: "#000000",
-      packageTabFill: "#ffffff",
+      packageTabFill: "#f1f5f9",
     },
     port: {
       fill: "#000000",
@@ -115,12 +115,12 @@ export const THEMES: Record<"cad-blueprint" | "syson-clean" | "iso-drafting", Th
       connectionStroke: "#000000",
       flowStroke: "#000000",
       satisfyStroke: "#000000",
-      specializationStroke: "#000000",
+      specializationStroke: "#333333",
       transitionStroke: "#000000",
       strokeWidth: 1.2,
       textColor: "#000000",
     },
-    isIso: true,
+    isIso: false,
   },
 };
 

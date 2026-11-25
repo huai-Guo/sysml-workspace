@@ -44,6 +44,14 @@ export function registerSysMLShapes(): void {
             tagName: "text",
             selector: "foldBtn",
           },
+          {
+            tagName: "text",
+            selector: "collapseBtn",
+          },
+          {
+            tagName: "text",
+            selector: "drillBtn",
+          },
         ],
         attrs: {
           packageTab: {
@@ -125,6 +133,35 @@ export function registerSysMLShapes(): void {
             fill: "#94a3b8",
             cursor: "pointer",
             text: "▾",
+            display: "none",
+          },
+          collapseBtn: {
+            ref: "header",
+            refX: "100%",
+            refX2: -36,
+            refY: 20,
+            textAnchor: "middle",
+            dominantBaseline: "central",
+            fontSize: 11,
+            fontWeight: "bold",
+            fontFamily: "ui-monospace, monospace, sans-serif",
+            fill: "#94a3b8",
+            cursor: "pointer",
+            text: "[-]",
+            display: "none",
+          },
+          drillBtn: {
+            ref: "header",
+            refX: "100%",
+            refX2: -16,
+            refY: 20,
+            textAnchor: "middle",
+            dominantBaseline: "central",
+            fontSize: 12,
+            fontFamily: "ui-monospace, monospace, sans-serif",
+            fill: "#94a3b8",
+            cursor: "pointer",
+            text: "⤢",
             display: "none",
           },
         },
@@ -276,9 +313,18 @@ export function registerSysMLShapes(): void {
   }
 }
 
+export interface BuildNodeAttrsOptions {
+  depth?: number;
+  isCompound?: boolean;
+  isCollapsed?: boolean;
+  lodTier?: "macro" | "meso" | "micro";
+  scale?: number;
+}
+
 export function buildNodeAttrs(
   node: SysMLViewNode,
   theme: ThemeStyles,
+  options: BuildNodeAttrsOptions = {},
 ): Record<string, unknown> {
   const isDefinition = node.shapeCategory === "definition";
   const isUsage = node.shapeCategory === "usage";
@@ -286,7 +332,7 @@ export function buildNodeAttrs(
   const isState = node.shapeCategory === "state";
   const isReq = node.shapeCategory === "requirement";
 
-  // Corner radiuses per OMG standard
+  // Corner radiuses per SysML standard
   let rx = 0;
   let ry = 0;
   if (isUsage) {
@@ -308,6 +354,29 @@ export function buildNodeAttrs(
     stroke = theme.node.packageTabFill || theme.node.stroke;
   }
 
+  // Depth-based cavity brightness tint
+  const depth = options.depth || 0;
+  let bodyFill = theme.node.fill;
+  let headerFill = theme.node.headerFill;
+
+  if (theme.name.includes("Blueprint")) {
+    const shades = ["#131b26", "#172130", "#1c283a", "#223046"];
+    const headerShades = ["#1a2434", "#1f2d42", "#24354e", "#2b3e5b"];
+    bodyFill = shades[Math.min(depth, shades.length - 1)];
+    headerFill = headerShades[Math.min(depth, headerShades.length - 1)];
+  } else if (theme.name.includes("Clean")) {
+    const shades = ["#ffffff", "#f8fafc", "#f1f5f9", "#e2e8f0"];
+    const headerShades = ["#f1f5f9", "#e2e8f0", "#cbd5e1", "#94a3b8"];
+    bodyFill = shades[Math.min(depth, shades.length - 1)];
+    headerFill = headerShades[Math.min(depth, headerShades.length - 1)];
+  } else {
+    // Paper Clean B&W
+    const shades = ["#ffffff", "#fdfdfd", "#f8f8f8", "#f4f4f4"];
+    const headerShades = ["#f8fafc", "#f1f5f9", "#e2e8f0", "#cbd5e1"];
+    bodyFill = shades[Math.min(depth, shades.length - 1)];
+    headerFill = headerShades[Math.min(depth, headerShades.length - 1)];
+  }
+
   // Build compartments text
   const compLines: string[] = [];
   if (node.compartments && node.compartments.length > 0) {
@@ -324,48 +393,70 @@ export function buildNodeAttrs(
   // Title with type label if present
   const titleText = node.name + (node.typeLabel ? ` ${node.typeLabel}` : "");
 
+  // LOD compensations
+  const lod = options.lodTier || "meso";
+  const scale = options.scale || 1.0;
+  const isMacro = lod === "macro";
+  const compTitleSize = isMacro ? Math.min(26, Math.round(13 / Math.max(scale, 0.35))) : 13;
+  const compStrokeWidth = isMacro ? Math.min(4, Math.max(1.5, 1.5 / Math.max(scale, 0.5))) : theme.node.strokeWidth;
+
+  const isCompound = options.isCompound ?? false;
+  const isCollapsed = options.isCollapsed ?? false;
+
   return {
     packageTab: {
       display: isPackage ? "block" : "none",
       fill: theme.node.packageTabFill,
       stroke: stroke,
-      strokeWidth: theme.node.strokeWidth,
+      strokeWidth: compStrokeWidth,
     },
     body: {
-      fill: theme.node.fill,
+      fill: bodyFill,
       stroke: stroke,
-      strokeWidth: theme.node.strokeWidth,
+      strokeWidth: compStrokeWidth,
       rx,
       ry,
     },
     header: {
-      fill: theme.node.headerFill,
+      fill: headerFill,
       rx: rx > 0 ? rx : 0,
       ry: ry > 0 ? ry : 0,
-      display: theme.isIso ? "none" : "block",
+      display: "block",
     },
     stereotype: {
       fill: theme.node.textSecondary,
-      text: node.stereotype || `«${node.kind}»`,
+      text: isMacro ? "" : node.stereotype || `«${node.kind}»`,
+      display: isMacro ? "none" : "block",
     },
     title: {
       fill: theme.node.textPrimary,
       text: titleText,
+      fontSize: compTitleSize,
     },
     divider: {
       stroke: theme.node.dividerColor,
-      strokeWidth: theme.node.strokeWidth,
-      display: hasCompartments && !node.collapsed ? "block" : "none",
+      strokeWidth: compStrokeWidth,
+      display: hasCompartments && !node.collapsed && !isMacro && !isCollapsed ? "block" : "none",
     },
     compartments: {
       fill: theme.node.textSecondary,
       text: compartmentsText,
-      display: hasCompartments && !node.collapsed ? "block" : "none",
+      display: hasCompartments && !node.collapsed && !isMacro && !isCollapsed ? "block" : "none",
     },
     foldBtn: {
       fill: theme.node.textSecondary,
       text: node.collapsed ? "▸" : "▾",
-      display: hasCompartments ? "block" : "none",
+      display: hasCompartments && !isCompound && !isMacro ? "block" : "none",
+    },
+    collapseBtn: {
+      display: isCompound ? "block" : "none",
+      fill: theme.node.textSecondary,
+      text: isCollapsed ? "[+]" : "[-]",
+    },
+    drillBtn: {
+      display: isCompound ? "block" : "none",
+      fill: theme.node.textSecondary,
+      text: "⤢",
     },
   };
 }
@@ -373,8 +464,12 @@ export function buildNodeAttrs(
 export function buildPortItems(
   node: SysMLViewNode,
   theme: ThemeStyles,
+  options: BuildNodeAttrsOptions = {},
 ): Record<string, unknown>[] {
   if (!node.ports || node.ports.length === 0) return [];
+
+  const isMacro = options.lodTier === "macro";
+  const isMicro = options.lodTier === "micro";
 
   return node.ports.map((port) => {
     const group = port.sideHint || "W";
@@ -389,7 +484,13 @@ export function buildPortItems(
     const conjPrefix = port.conjugated ? "~" : "";
     const conjBadge = port.conjugated ? " [~]" : "";
     const typeSuffix = port.typeName ? `: ${port.typeName}` : "";
-    const portLabel = `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`;
+
+    let portLabel = `${dirSymbol} ${conjPrefix}${port.name}`;
+    if (isMicro) {
+      portLabel = `${dirSymbol} ${conjPrefix}${port.name}${typeSuffix}${conjBadge}`;
+    } else if (isMacro) {
+      portLabel = ""; // In bird's-eye view, hide port labels to avoid noise
+    }
 
     return {
       id: port.id,
@@ -407,6 +508,7 @@ export function buildPortItems(
         text: {
           text: portLabel,
           fill: theme.port.textColor,
+          display: isMacro ? "none" : "block",
         },
       },
     };

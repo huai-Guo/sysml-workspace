@@ -4,38 +4,50 @@ import type { SysMLViewIR, SysMLViewNode, NodeLayoutPosition } from "./types";
 
 const elk = new ELK();
 
-function estimateNodeDimensions(node: SysMLViewNode): { width: number; height: number } {
+export function estimateNodeDimensions(
+  node: SysMLViewNode,
+  isCompound: boolean = false,
+): { width: number; height: number; topPadding: number } {
   // Base width on title length
   const labelLength = (node.name + (node.typeLabel || "")).length;
   let width = Math.max(180, labelLength * 9 + 40);
 
-  // Height: header
-  let height = 44;
-
   // Compartments
+  let compHeight = 0;
   if (node.compartments && node.compartments.length > 0) {
     for (const comp of node.compartments) {
-      height += 24; // Compartment header
-      height += comp.items.length * 18; // Items
+      compHeight += 24; // Compartment header
+      compHeight += comp.items.length * 18; // Items
       for (const item of comp.items) {
         if (item.text.length * 8 + 30 > width) {
           width = Math.max(width, item.text.length * 8 + 30);
         }
       }
     }
-    height += 8; // Bottom padding
+    compHeight += 8; // Bottom padding
   }
+
+  // topPadding = header (44px) + compHeight + 20px spacing
+  const topPadding = Math.max(56, 44 + compHeight + 20);
+
+  let height = 44 + compHeight;
 
   // Ensure minimum height if ports are present
   if (node.ports && node.ports.length > 0) {
     height = Math.max(height, 80 + node.ports.length * 15);
   }
 
-  // Cap width to reasonable max
-  width = Math.min(360, Math.max(width, 180));
-  height = Math.max(height, 56);
+  if (isCompound) {
+    // Compound container: do NOT clamp width with Math.min(360, width)
+    width = Math.max(300, width);
+    height = Math.max(120, topPadding + 60);
+  } else {
+    // Leaf node
+    width = Math.min(360, Math.max(width, 180));
+    height = Math.max(height, 56);
+  }
 
-  return { width, height };
+  return { width, height, topPadding };
 }
 
 export interface ElkLayoutResult {
@@ -68,17 +80,24 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
 
   // Recursive ELK node constructor
   function buildElkNode(node: SysMLViewNode): ElkNode {
-    const { width, height } = estimateNodeDimensions(node);
     const childNodes = childrenMap.get(node.id) || [];
+    const isCompound = childNodes.length > 0;
+    const { width, height, topPadding } = estimateNodeDimensions(node, isCompound);
 
     const elkNode: ElkNode = {
       id: node.id,
       width,
       height,
-      layoutOptions: {
-        "elk.padding": "[top=50,left=24,bottom=24,right=24]",
-        "elk.spacing.nodeNode": "35",
-      },
+      layoutOptions: isCompound
+        ? {
+            "elk.padding": `[top=${topPadding},left=30,bottom=30,right=30]`,
+            "elk.spacing.nodeNode": "40",
+            "elk.direction": "RIGHT",
+          }
+        : {
+            "elk.padding": "[top=16,left=16,bottom=16,right=16]",
+            "elk.spacing.nodeNode": "35",
+          },
     };
 
     if (childNodes.length > 0) {
@@ -183,7 +202,8 @@ export async function runElkLayout(viewIR: SysMLViewIR): Promise<ElkLayoutResult
     let curY = 60;
     let rowH = 0;
     for (const node of viewIR.nodes) {
-      const { width, height } = estimateNodeDimensions(node);
+      const isCompound = (childrenMap.get(node.id) || []).length > 0;
+      const { width, height } = estimateNodeDimensions(node, isCompound);
       positions.set(node.id, { x: curX, y: curY, width, height });
       curX += width + 50;
       rowH = Math.max(rowH, height);

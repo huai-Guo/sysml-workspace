@@ -54,7 +54,7 @@ test("Theme resolution supports all 3 skins with correct contrast and ISO flags"
 
   const isoTheme = resolveTheme("iso-drafting");
   assert.equal(isoTheme.canvasBg, "#ffffff");
-  assert.equal(isoTheme.isIso, true);
+  assert.equal(isoTheme.isIso, false);
   assert.equal(isoTheme.node.stroke, "#000000");
   assert.equal(isoTheme.edge.strokeWidth, 1.2);
 });

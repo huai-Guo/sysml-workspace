@@ -19,10 +19,11 @@ export interface InsertElementEvent {
 export class SysMLPalette {
   private container: HTMLElement;
   private graph: Graph;
-  private paletteEl: HTMLDivElement;
-  private isCollapsed = false;
+  private popoverEl: HTMLElement;
+  private isVisible = false;
   private onInsert?: (event: InsertElementEvent) => void;
   private itemCounters: Record<string, number> = {};
+  private outsideClickListener: (e: MouseEvent) => void;
 
   private items: PaletteItem[] = [
     {
@@ -92,40 +93,56 @@ export class SysMLPalette {
     this.graph = graph;
     this.onInsert = options.onInsert;
 
-    this.paletteEl = document.createElement("div");
-    this.paletteEl.className = "sysml-palette";
-    this.paletteEl.style.position = "absolute";
-    this.paletteEl.style.top = "24px";
-    this.paletteEl.style.left = "24px";
-    this.paletteEl.style.width = "180px";
-    this.paletteEl.style.maxHeight = "calc(100% - 60px)";
-    this.paletteEl.style.backgroundColor = "var(--bg-card, #131b26)";
-    this.paletteEl.style.border = "1px solid var(--border-subtle, #273549)";
-    this.paletteEl.style.borderRadius = "6px";
-    this.paletteEl.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.4)";
-    this.paletteEl.style.zIndex = "16";
-    this.paletteEl.style.display = "flex";
-    this.paletteEl.style.flexDirection = "column";
-    this.paletteEl.style.overflow = "hidden";
-    this.paletteEl.style.fontSize = "12px";
-    this.paletteEl.style.transition = "transform 0.2s ease, width 0.2s ease";
+    const existing = document.getElementById("palette-menu-popover");
+    if (existing) {
+      this.popoverEl = existing;
+    } else {
+      this.popoverEl = document.createElement("div");
+      this.popoverEl.id = "palette-menu-popover";
+      this.popoverEl.className = "canvas-palette-popover";
+      this.popoverEl.hidden = true;
+      container.appendChild(this.popoverEl);
+    }
 
-    container.appendChild(this.paletteEl);
+    this.outsideClickListener = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const toggleBtn = document.getElementById("toggle-palette-btn");
+      if (
+        this.isVisible &&
+        target &&
+        !this.popoverEl.contains(target) &&
+        (!toggleBtn || !toggleBtn.contains(target))
+      ) {
+        this.hide();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("click", this.outsideClickListener);
+    }
 
     this.render();
+    this.setupCanvasDrop();
+  }
+
+  public toggle(show?: boolean): void {
+    this.isVisible = show !== undefined ? show : !this.isVisible;
+    this.popoverEl.hidden = !this.isVisible;
   }
 
   public toggleCollapse(collapse?: boolean): void {
-    this.isCollapsed = collapse !== undefined ? collapse : !this.isCollapsed;
-    if (this.isCollapsed) {
-      this.paletteEl.classList.add("collapsed");
-      this.paletteEl.style.width = "32px";
-      this.paletteEl.style.overflow = "hidden";
+    if (collapse !== undefined) {
+      this.toggle(!collapse);
     } else {
-      this.paletteEl.classList.remove("collapsed");
-      this.paletteEl.style.width = "180px";
-      this.paletteEl.style.overflow = "visible";
+      this.toggle();
     }
+  }
+
+  public show(): void {
+    this.toggle(true);
+  }
+
+  public hide(): void {
+    this.toggle(false);
   }
 
   private generateUniqueName(prefix: string): string {
@@ -134,60 +151,35 @@ export class SysMLPalette {
   }
 
   private render(): void {
-    this.paletteEl.replaceChildren();
+    this.popoverEl.replaceChildren();
 
-    // Header
     const header = document.createElement("div");
-    header.className = "palette-header";
-    header.style.display = "flex";
-    header.style.alignItems = "center";
-    header.style.justifyContent = "space-between";
-    header.style.padding = "7px 10px";
-    header.style.backgroundColor = "var(--bg-card-header, #192332)";
-    header.style.borderBottom = "1px solid var(--border-subtle, #273549)";
-    header.style.userSelect = "none";
+    header.className = "popover-header";
 
     const titleWrap = document.createElement("div");
-    titleWrap.style.display = "flex";
-    titleWrap.style.alignItems = "center";
-    titleWrap.style.gap = "6px";
+    titleWrap.className = "popover-title-wrap";
 
     const icon = document.createElement("span");
+    icon.className = "popover-icon";
     icon.textContent = "❖";
-    icon.style.fontWeight = "bold";
-    icon.style.color = "var(--accent-emerald, #10b981)";
 
     const title = document.createElement("span");
-    title.textContent = "SysML v2 元件库";
-    title.style.fontWeight = "600";
-    title.style.color = "var(--text-primary, #f1f5f9)";
+    title.className = "popover-title";
+    title.textContent = "新建 SysML 图元";
 
     titleWrap.append(icon, title);
 
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "palette-toggle-btn";
-    toggleBtn.textContent = this.isCollapsed ? "▶" : "◀";
-    toggleBtn.style.background = "none";
-    toggleBtn.style.border = "none";
-    toggleBtn.style.cursor = "pointer";
-    toggleBtn.style.color = "var(--text-secondary, #94a3b8)";
-    toggleBtn.style.padding = "0 4px";
-    toggleBtn.onclick = () => {
-      this.toggleCollapse();
-      toggleBtn.textContent = this.isCollapsed ? "▶" : "◀";
-    };
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "popover-close-btn";
+    closeBtn.textContent = "✕";
+    closeBtn.title = "收起浮层";
+    closeBtn.onclick = () => this.hide();
 
-    header.append(titleWrap, toggleBtn);
-    this.paletteEl.appendChild(header);
+    header.append(titleWrap, closeBtn);
+    this.popoverEl.appendChild(header);
 
-    // Body
     const body = document.createElement("div");
-    body.className = "palette-body";
-    body.style.overflowY = "auto";
-    body.style.padding = "8px 10px";
-    body.style.display = "flex";
-    body.style.flexDirection = "column";
-    body.style.gap = "10px";
+    body.className = "popover-body";
 
     const categories: { key: PaletteItem["category"]; label: string }[] = [
       { key: "structure", label: "结构图元" },
@@ -200,58 +192,32 @@ export class SysMLPalette {
       if (catItems.length === 0) continue;
 
       const catSection = document.createElement("div");
+      catSection.className = "palette-cat-section";
 
       const catTitle = document.createElement("div");
+      catTitle.className = "palette-cat-title";
       catTitle.textContent = cat.label;
-      catTitle.style.fontSize = "10px";
-      catTitle.style.fontWeight = "600";
-      catTitle.style.color = "var(--text-muted, #64748b)";
-      catTitle.style.marginBottom = "4px";
       catSection.appendChild(catTitle);
 
       const itemsGrid = document.createElement("div");
-      itemsGrid.style.display = "flex";
-      itemsGrid.style.flexDirection = "column";
-      itemsGrid.style.gap = "4px";
+      itemsGrid.className = "palette-items-grid";
 
       for (const item of catItems) {
         const itemBtn = document.createElement("div");
         itemBtn.className = "palette-item-card";
         itemBtn.draggable = true;
         itemBtn.title = `${item.description} (单击插入或拖拽到画布)`;
-        itemBtn.style.display = "flex";
-        itemBtn.style.alignItems = "center";
-        itemBtn.style.gap = "8px";
-        itemBtn.style.padding = "5px 8px";
-        itemBtn.style.borderRadius = "4px";
-        itemBtn.style.backgroundColor = "var(--bg-card-hover, rgba(255,255,255,0.03))";
-        itemBtn.style.border = "1px solid var(--border-subtle, #273549)";
-        itemBtn.style.cursor = "grab";
-        itemBtn.style.userSelect = "none";
-        itemBtn.style.transition = "background-color 0.15s, border-color 0.15s";
-
-        itemBtn.onmouseenter = () => {
-          itemBtn.style.backgroundColor = "rgba(56, 189, 248, 0.1)";
-          itemBtn.style.borderColor = "var(--accent-blue, #38bdf8)";
-        };
-        itemBtn.onmouseleave = () => {
-          itemBtn.style.backgroundColor = "var(--bg-card-hover, rgba(255,255,255,0.03))";
-          itemBtn.style.borderColor = "var(--border-subtle, #273549)";
-        };
 
         const ico = document.createElement("span");
+        ico.className = "palette-item-icon";
         ico.textContent = item.icon;
-        ico.style.fontSize = "13px";
 
         const lbl = document.createElement("span");
+        lbl.className = "palette-item-label";
         lbl.textContent = item.label;
-        lbl.style.fontSize = "11px";
-        lbl.style.fontWeight = "500";
-        lbl.style.color = "var(--text-primary, #f1f5f9)";
 
         itemBtn.append(ico, lbl);
 
-        // Click to insert at center of graph viewport
         itemBtn.onclick = () => {
           const name = this.generateUniqueName(item.defaultPrefix);
           const center = this.graph.getGraphArea().center;
@@ -260,9 +226,9 @@ export class SysMLPalette {
             name,
             position: { x: center.x, y: center.y },
           });
+          this.hide();
         };
 
-        // HTML5 drag support
         itemBtn.ondragstart = (e) => {
           e.dataTransfer?.setData(
             "application/sysml-item",
@@ -277,10 +243,7 @@ export class SysMLPalette {
       body.appendChild(catSection);
     }
 
-    this.paletteEl.appendChild(body);
-
-    // Setup canvas drop target
-    this.setupCanvasDrop();
+    this.popoverEl.appendChild(body);
   }
 
   private setupCanvasDrop(): void {
@@ -305,7 +268,6 @@ export class SysMLPalette {
         const clientY = e.clientY - rect.top;
         const localPos = this.graph.clientToLocal(clientX, clientY);
 
-        // Check if dropped onto a node container
         const nodes = this.graph.getNodes();
         const targetNode = nodes.find((n) => {
           const pos = n.getPosition();
@@ -332,6 +294,9 @@ export class SysMLPalette {
   }
 
   public dispose(): void {
-    this.paletteEl.remove();
+    if (typeof document !== "undefined") {
+      document.removeEventListener("click", this.outsideClickListener);
+    }
+    this.popoverEl.remove();
   }
 }

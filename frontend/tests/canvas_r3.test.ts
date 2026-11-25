@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { SysMLViewIR } from "../src/canvas/types";
-import { DxfExporter } from "../src/canvas/exporters/dxf_exporter";
 import { DrawioExporter } from "../src/canvas/exporters/drawio_exporter";
 import { JsonExporter } from "../src/canvas/exporters/json_exporter";
 import { SvgExporter } from "../src/canvas/exporters/svg_exporter";
@@ -90,43 +89,6 @@ const sampleSource = `package ElectricVehicle {
     connection c_power connect Battery.output to Motor.input;
 }
 `;
-
-test("DxfExporter generates valid ASCII R2000 DXF with all 7 layers and entities", () => {
-  const dxf = DxfExporter.export(sampleViewIR, { includeFrame: true });
-
-  // 1. Valid AutoCAD 2000 Header
-  assert.ok(dxf.includes("$ACADVER\n1\nAC1015"), "Must declare AutoCAD 2000 version");
-
-  // 2. Contains all semantic layers
-  for (const layer of [
-    "0",
-    "L0_FRAME",
-    "L1_DEFINITIONS",
-    "L2_STRUCTURE",
-    "L3_BEHAVIOR",
-    "L4_CONNECTIONS",
-    "L5_REQUIREMENTS",
-  ]) {
-    assert.ok(dxf.includes(`\n2\n${layer}\n`), `Must define layer ${layer}`);
-  }
-
-  // 3. Node geometries and text
-  assert.ok(dxf.includes("LWPOLYLINE"), "Must contain polylines for node bounds");
-  assert.ok(dxf.includes("Battery"), "Must contain node label Battery");
-  assert.ok(dxf.includes("Motor"), "Must contain node label Motor");
-
-  // 4. EPLAN port stubs and edge polylines
-  assert.ok(dxf.includes("output"), "Must contain port text output");
-  assert.ok(dxf.includes("input"), "Must contain port text input");
-  assert.ok(dxf.includes("powerFlow"), "Must contain edge label powerFlow");
-
-  // 5. ISO sheet frame and coordinate zones
-  assert.ok(dxf.includes("ElectricVehicle - GENERAL"), "Must contain ISO title block text");
-  assert.ok(dxf.includes("CAD R2000"), "Must contain CAD title note");
-
-  // 6. Valid termination
-  assert.ok(dxf.trim().endsWith("EOF"), "Must terminate with standard EOF");
-});
 
 test("DrawioExporter generates uncompressed mxfile with embedded sysml metadata", () => {
   const drawio = DrawioExporter.export(sampleViewIR, { sysmlSource: sampleSource });

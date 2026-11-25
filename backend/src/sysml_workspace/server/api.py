@@ -186,7 +186,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
                 "X-Frame-Options": "DENY",
-                "Content-Security-Policy": f"default-src 'self'; script-src 'self'; style-src 'self' 'nonce-{nonce}'; img-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+                "Content-Security-Policy": f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
             }
         )
         route = getattr(request.scope.get("route"), "path", "unmatched")
