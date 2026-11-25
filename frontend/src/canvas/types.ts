@@ -75,6 +75,7 @@ export interface SysMLViewSummary {
 
 export interface SysMLViewIR {
   schemaVersion: "2.0";
+  rendererRevision?: string;
   sourceSha256: string;
   rootPackageName: string;
   viewType: ViewType;

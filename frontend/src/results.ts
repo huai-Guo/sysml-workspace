@@ -60,6 +60,7 @@ export class Results {
     private apply: (code: string, skipConfirm?: boolean) => void,
     private jumpToSource?: (location: { offset?: number; line?: number; column?: number }) => void,
     private getSource?: () => string,
+    private applyAndRender?: (code: string) => void,
   ) {
     const tabs = [
       ...document.querySelectorAll<HTMLButtonElement>("[data-tab]"),
@@ -114,7 +115,11 @@ export class Results {
           },
           getSource: () => this.getSource?.() || this.current?.result?.sysml_source || "",
           applySource: (newSource, skipConfirm) => {
-            this.apply(newSource, skipConfirm);
+            if (this.applyAndRender) {
+              this.applyAndRender(newSource);
+            } else {
+              this.apply(newSource, skipConfirm);
+            }
           },
           showNotice: (msg) => {
             const noticeEl = optEl("notice-text");
@@ -166,6 +171,12 @@ export class Results {
       exportMenuBtn.onclick = (e) => {
         e.stopPropagation();
         exportPopover.hidden = !exportPopover.hidden;
+        if (!exportPopover.hidden) {
+          const pPop = optEl("palette-menu-popover");
+          const lPop = optEl("layers-menu-popover");
+          if (pPop) pPop.hidden = true;
+          if (lPop) lPop.hidden = true;
+        }
       };
       document.addEventListener("click", (e) => {
         if (!exportPopover.hidden && !exportPopover.contains(e.target as Node) && e.target !== exportMenuBtn) {
@@ -465,6 +476,7 @@ export class Results {
     this.resultEditor.diagnostics(result.diagnostics || []);
     const qual = optEl("quality");
     const diagCount = result.diagnostics?.length || 0;
+    const namedEntityCount = (result.semantic_model?.entities || []).filter((e) => Boolean(e.name)).length;
     if (qual) {
       if (result.valid) {
         qual.className = "console-summary-card success";
@@ -472,13 +484,13 @@ export class Results {
           <div class="summary-left">
             <span class="summary-icon">✓</span>
             <div class="summary-text">
-              <div class="summary-title">模型编译与语法验证通过</div>
-              <div class="summary-sub">SysML v2 语义合规，拓扑分析就绪</div>
+              <div class="summary-title">SysML v2 模型语法与语义验证通过</div>
+              <div class="summary-sub">点击下方大纲中的任意元素可直接定位至对应源代码行</div>
             </div>
           </div>
           <div class="summary-badges">
-            <span class="console-pill success-pill">0 错误</span>
-            <span class="console-pill">${result.semantic_model?.entities.length || 0} 个实体</span>
+            <span class="console-pill success-pill">0 处错误</span>
+            <span class="console-pill">${namedEntityCount} 个命名元素</span>
           </div>
         `;
       } else {
@@ -487,8 +499,8 @@ export class Results {
           <div class="summary-left">
             <span class="summary-icon">✕</span>
             <div class="summary-text">
-              <div class="summary-title">发现语法或语义错误 (${diagCount} 处)</div>
-              <div class="summary-sub">请根据下方诊断信息定位或借助 AI 伴随助手自愈修复</div>
+              <div class="summary-title">编译检查发现 ${diagCount} 处语法或语义问题</div>
+              <div class="summary-sub">点击具体错误项可跳转至对应代码行，也可在右侧让 AI 助手一键自愈修复</div>
             </div>
           </div>
           <div class="summary-badges">
@@ -501,7 +513,7 @@ export class Results {
     if (resHash) resHash.textContent = result.final_artifact_sha256 ? `SHA-256 · ${result.final_artifact_sha256}` : "";
     const entityCountEl = optEl("entity-count");
     if (entityCountEl) {
-      entityCountEl.textContent = String(result.semantic_model?.entities.length || 0);
+      entityCountEl.textContent = String(namedEntityCount);
     }
     const diagCountEl = optEl("diagnostic-count");
     if (diagCountEl) {
@@ -550,45 +562,9 @@ export class Results {
         empty.className = "console-empty-box";
         empty.innerHTML = `
           <span class="empty-check">✓</span>
-          <span>未发现语法或语义错误，代码结构合规</span>
+          <span>未发现任何语法或语义错误</span>
         `;
         diagnostics.append(empty);
-      }
-    }
-    const facts = optEl("run-facts");
-    if (facts) {
-      facts.replaceChildren();
-      const tokens = (result.model_usage || []).reduce(
-        (sum, c) => sum + (c.usage?.total_tokens || 0),
-        0,
-      );
-      const items = [
-        [
-          "验证耗时",
-          result.validation_metadata?.duration_ms
-            ? `${(result.validation_metadata.duration_ms / 1000).toFixed(2)} 秒`
-            : "0.14 秒",
-        ],
-        ["模型用量", tokens ? `${tokens} tokens` : "本地规则验证"],
-        ["会话记忆", result.memory?.included ? "已引用近期上下文" : "未引用"],
-        [
-          "检索证据",
-          result.evidence?.status === "unavailable"
-            ? "暂无外部证据"
-            : `${result.evidence?.citations?.length || 0} 条来源`,
-        ],
-      ];
-      for (const [label, value] of items) {
-        const card = document.createElement("div");
-        card.className = "console-stat-card";
-        const lbl = document.createElement("span");
-        lbl.className = "stat-label";
-        lbl.textContent = label;
-        const val = document.createElement("span");
-        val.className = "stat-value";
-        val.textContent = value;
-        card.append(lbl, val);
-        facts.append(card);
       }
     }
     for (const button of document.querySelectorAll<HTMLButtonElement>(
@@ -681,16 +657,18 @@ export class Results {
   }
   private entities() {
     const searchInput = optEl<HTMLInputElement>("entity-search");
-    const query = searchInput ? searchInput.value.toLowerCase() : "";
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
     const list = optEl("entities");
     if (!list) return;
     list.replaceChildren();
     const values = (
       this.current?.result?.semantic_model?.entities || []
-    ).filter((e) =>
-      `${e.qualified_name || e.name || ""} ${e.kind}`
-        .toLowerCase()
-        .includes(query),
+    ).filter(
+      (e) =>
+        Boolean(e.name) &&
+        `${e.qualified_name || e.name || ""} ${e.kind}`
+          .toLowerCase()
+          .includes(query),
     );
     for (const entity of values) {
       const row = action(
@@ -699,11 +677,11 @@ export class Results {
         "entity-row",
       );
       row.append(
-        node("span", entity.kind, "entity-type"),
+        node("span", entity.kind.replace(/(Definition|Usage)$/, " $1"), "entity-type"),
         node("span", this.name(entity), "entity-name"),
         node(
           "span",
-          entity.location?.line ? `L${entity.location.line}` : "—",
+          entity.location?.line ? `第 ${entity.location.line} 行 →` : "定位 →",
           "entity-line",
         ),
       );
@@ -714,8 +692,8 @@ export class Results {
         node(
           "p",
           query
-            ? "没有匹配的实体。"
-            : "运行验证或实体提取后，将显示可追溯的模型元素。",
+            ? "未找到匹配的模型元素。"
+            : "点击【刷新视图】完成编译后，此处将列出所有包、定义、部件、端口与需求结构大纲。",
           "panel-footnote",
         ),
       );
@@ -724,8 +702,12 @@ export class Results {
     return entity.qualified_name || entity.name || "（匿名元素）";
   }
   private go(location: { offset?: number; line?: number; column?: number }) {
-    this.tab("code");
-    this.resultEditor.go(location);
+    if (this.jumpToSource) {
+      this.jumpToSource(location);
+    } else {
+      this.tab("code");
+      this.resultEditor.go(location);
+    }
   }
   elapsed() {
     if (!this.current) return;

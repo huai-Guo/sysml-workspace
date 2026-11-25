@@ -1,9 +1,10 @@
 import type { Graph } from "@antv/x6/es";
+import type { SysMLViewNode } from "./types";
 
 export interface PaletteItem {
   kind: string;
   label: string;
-  icon: string;
+  badge: string;
   category: "structure" | "behavior" | "requirement";
   defaultPrefix: string;
   description: string;
@@ -22,76 +23,89 @@ export class SysMLPalette {
   private popoverEl: HTMLElement;
   private isVisible = false;
   private onInsert?: (event: InsertElementEvent) => void;
+  private getDefaultParentId?: () => string | undefined;
   private itemCounters: Record<string, number> = {};
   private outsideClickListener: (e: MouseEvent) => void;
 
   private items: PaletteItem[] = [
     {
       kind: "package",
-      label: "Package",
-      icon: "📦",
+      label: "包 (Package)",
+      badge: "pkg",
       category: "structure",
-      defaultPrefix: "Pkg",
-      description: "SysML 顶层或子系统包命名空间",
+      defaultPrefix: "SubPkg",
+      description: "新增命名空间包容器",
     },
     {
       kind: "part_def",
-      label: "Part Def",
-      icon: "⛶",
+      label: "部件定义 (Part Def)",
+      badge: "def",
       category: "structure",
-      defaultPrefix: "ComponentDef",
-      description: "可复用的部件定义 (Definition 直角框)",
+      defaultPrefix: "ModuleDef",
+      description: "新增可复用部件类型定义",
     },
     {
       kind: "part",
-      label: "Part",
-      icon: "▢",
+      label: "部件实例 (Part)",
+      badge: "part",
       category: "structure",
-      defaultPrefix: "subsystem",
-      description: "系统部件用法实例 (Usage 圆角框)",
+      defaultPrefix: "unit",
+      description: "在系统或当前选中容器内新增部件",
+    },
+    {
+      kind: "port_def",
+      label: "端口定义 (Port Def)",
+      badge: "pdef",
+      category: "structure",
+      defaultPrefix: "SignalIfc",
+      description: "新增接口端口类型定义",
     },
     {
       kind: "port",
-      label: "Port",
-      icon: "▣",
+      label: "边界端口 (Port)",
+      badge: "port",
       category: "structure",
-      defaultPrefix: "port_io",
-      description: "边界交互管脚端口 (EPLAN 贴边管脚)",
+      defaultPrefix: "ioPort",
+      description: "在选中定义或部件上新增边界端口",
     },
     {
       kind: "state",
-      label: "State",
-      icon: "◯",
+      label: "状态 (State)",
+      badge: "state",
       category: "behavior",
-      defaultPrefix: "State_Active",
-      description: "状态机行为状态 (State 视图圆角框)",
+      defaultPrefix: "Mode",
+      description: "新增状态机行为节点",
     },
     {
       kind: "action",
-      label: "Action",
-      icon: "▷",
+      label: "动作 (Action)",
+      badge: "act",
       category: "behavior",
-      defaultPrefix: "ExecuteStep",
-      description: "行为动作/执行步骤",
+      defaultPrefix: "ProcessStep",
+      description: "新增执行动作步骤",
     },
     {
       kind: "requirement",
-      label: "Requirement",
-      icon: "✦",
+      label: "需求规格 (Requirement)",
+      badge: "req",
       category: "requirement",
-      defaultPrefix: "Req_Safety",
-      description: "系统需求规格约束 (Requirement 视图)",
+      defaultPrefix: "ReqSpec",
+      description: "新增带文档说明的系统需求",
     },
   ];
 
   constructor(
     container: HTMLElement,
     graph: Graph,
-    options: { onInsert?: (event: InsertElementEvent) => void } = {},
+    options: {
+      onInsert?: (event: InsertElementEvent) => void;
+      getDefaultParentId?: () => string | undefined;
+    } = {},
   ) {
     this.container = container;
     this.graph = graph;
     this.onInsert = options.onInsert;
+    this.getDefaultParentId = options.getDefaultParentId;
 
     const existing = document.getElementById("palette-menu-popover");
     if (existing) {
@@ -127,14 +141,17 @@ export class SysMLPalette {
   public toggle(show?: boolean): void {
     this.isVisible = show !== undefined ? show : !this.isVisible;
     this.popoverEl.hidden = !this.isVisible;
+    if (this.isVisible) {
+      // Close sibling popovers so menus never overlap
+      const layersPop = document.getElementById("layers-menu-popover");
+      const exportPop = document.getElementById("export-menu-popover");
+      if (layersPop) layersPop.hidden = true;
+      if (exportPop) exportPop.hidden = true;
+    }
   }
 
   public toggleCollapse(collapse?: boolean): void {
-    if (collapse !== undefined) {
-      this.toggle(!collapse);
-    } else {
-      this.toggle();
-    }
+    this.toggle(collapse !== undefined ? !collapse : undefined);
   }
 
   public show(): void {
@@ -145,9 +162,27 @@ export class SysMLPalette {
     this.toggle(false);
   }
 
-  private generateUniqueName(prefix: string): string {
-    this.itemCounters[prefix] = (this.itemCounters[prefix] || 0) + 1;
-    return `${prefix}_${this.itemCounters[prefix]}`;
+  private generateUniqueName(prefix: string, existingSource: string = ""): string {
+    for (let i = 1; i < 999; i++) {
+      this.itemCounters[prefix] = Math.max(this.itemCounters[prefix] || 0, i);
+      const candidate = `${prefix}_${this.itemCounters[prefix]}`;
+      if (!existingSource || !new RegExp(`\\b${candidate}\\b`).test(existingSource)) {
+        return candidate;
+      }
+      this.itemCounters[prefix]++;
+    }
+    return `${prefix}_${Date.now() % 1000}`;
+  }
+
+  private resolveActiveParentId(): string | undefined {
+    const selected = this.graph.getSelectedCells().filter((c) => c.isNode());
+    if (selected.length === 1) {
+      const vn = (selected[0].getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+      if (vn && ["package", "definition", "usage", "state"].includes(vn.shapeCategory)) {
+        return vn.name;
+      }
+    }
+    return this.getDefaultParentId?.();
   }
 
   private render(): void {
@@ -156,34 +191,29 @@ export class SysMLPalette {
     const header = document.createElement("div");
     header.className = "popover-header";
 
-    const titleWrap = document.createElement("div");
-    titleWrap.className = "popover-title-wrap";
-
-    const icon = document.createElement("span");
-    icon.className = "popover-icon";
-    icon.textContent = "❖";
-
     const title = document.createElement("span");
     title.className = "popover-title";
-    title.textContent = "新建 SysML 图元";
-
-    titleWrap.append(icon, title);
+    title.textContent = "点击或拖拽新建图元";
 
     const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
     closeBtn.className = "popover-close-btn";
-    closeBtn.textContent = "✕";
-    closeBtn.title = "收起浮层";
-    closeBtn.onclick = () => this.hide();
+    closeBtn.textContent = "×";
+    closeBtn.title = "关闭";
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.hide();
+    };
 
-    header.append(titleWrap, closeBtn);
+    header.append(title, closeBtn);
     this.popoverEl.appendChild(header);
 
     const body = document.createElement("div");
     body.className = "popover-body";
 
     const categories: { key: PaletteItem["category"]; label: string }[] = [
-      { key: "structure", label: "结构图元" },
-      { key: "behavior", label: "行为与状态" },
+      { key: "structure", label: "结构与接口" },
+      { key: "behavior", label: "状态与行为" },
       { key: "requirement", label: "需求规格" },
     ];
 
@@ -203,30 +233,35 @@ export class SysMLPalette {
       itemsGrid.className = "palette-items-grid";
 
       for (const item of catItems) {
-        const itemBtn = document.createElement("div");
+        const itemBtn = document.createElement("button");
+        itemBtn.type = "button";
         itemBtn.className = "palette-item-card";
         itemBtn.draggable = true;
-        itemBtn.title = `${item.description} (单击插入或拖拽到画布)`;
+        itemBtn.title = item.description;
 
-        const ico = document.createElement("span");
-        ico.className = "palette-item-icon";
-        ico.textContent = item.icon;
+        const badge = document.createElement("span");
+        badge.className = "palette-item-badge";
+        badge.textContent = item.badge;
 
         const lbl = document.createElement("span");
         lbl.className = "palette-item-label";
         lbl.textContent = item.label;
 
-        itemBtn.append(ico, lbl);
+        itemBtn.append(badge, lbl);
 
-        itemBtn.onclick = () => {
+        itemBtn.onclick = (e) => {
+          e.stopPropagation();
           const name = this.generateUniqueName(item.defaultPrefix);
-          const center = this.graph.getGraphArea().center;
+          const targetParentId =
+            item.kind === "package" || item.kind === "part_def" || item.kind === "port_def"
+              ? undefined
+              : this.resolveActiveParentId();
+          this.hide();
           this.onInsert?.({
             kind: item.kind,
             name,
-            position: { x: center.x, y: center.y },
+            targetParentId,
           });
-          this.hide();
         };
 
         itemBtn.ondragstart = (e) => {
@@ -248,28 +283,26 @@ export class SysMLPalette {
 
   private setupCanvasDrop(): void {
     const mount = this.container.querySelector<HTMLElement>(".x6-graph-mount") || this.container;
-    mount.ondragover = (e) => {
-      e.preventDefault();
-      if (e.dataTransfer) {
+    mount.addEventListener("dragover", (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("application/sysml-item")) {
+        e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
       }
-    };
+    });
 
-    mount.ondrop = (e) => {
-      e.preventDefault();
+    mount.addEventListener("drop", (e) => {
       const raw = e.dataTransfer?.getData("application/sysml-item");
       if (!raw) return;
+      e.preventDefault();
 
       try {
         const parsed = JSON.parse(raw);
         const name = this.generateUniqueName(parsed.defaultPrefix || "Item");
-        const rect = mount.getBoundingClientRect();
-        const clientX = e.clientX - rect.left;
-        const clientY = e.clientY - rect.top;
-        const localPos = this.graph.clientToLocal(clientX, clientY);
+        const localPos = this.graph.clientToLocal(e.clientX, e.clientY);
 
         const nodes = this.graph.getNodes();
         const targetNode = nodes.find((n) => {
+          if (!n.isVisible()) return false;
           const pos = n.getPosition();
           const size = n.getSize();
           return (
@@ -279,8 +312,10 @@ export class SysMLPalette {
             localPos.y <= pos.y + size.height
           );
         });
-        const targetParentId = targetNode ? targetNode.id : undefined;
+        const vn = (targetNode?.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+        const targetParentId = vn?.name;
 
+        this.hide();
         this.onInsert?.({
           kind: parsed.kind,
           name,
@@ -290,7 +325,7 @@ export class SysMLPalette {
       } catch (err) {
         console.warn("Palette drop parse error:", err);
       }
-    };
+    });
   }
 
   public dispose(): void {

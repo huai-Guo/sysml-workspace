@@ -66,6 +66,8 @@ export class SemanticEditor {
       snippet = `package ${name} {\n}\n`;
     } else if (k === "part_def") {
       snippet = `    part def ${name} {\n    }\n`;
+    } else if (k === "port_def") {
+      snippet = `    port def ${name};\n`;
     } else if (k === "part") {
       snippet = `        part ${name};\n`;
     } else if (k === "port") {
@@ -81,10 +83,21 @@ export class SemanticEditor {
     }
 
     // If an owner name is specified, insert inside the owner block
-    if (ownerName) {
-      const targetOwner = ownerName.includes("::") ? ownerName.split("::").pop()! : ownerName;
+    let resolvedOwner = ownerName;
+    if (!resolvedOwner && k === "port") {
+      // Auto-attach port to the first available `part def` or `part` block if none selected
+      const autoPart = /(?:part\s+def|part)\s+([A-Za-z_][A-Za-z0-9_]*)\b[^{;]*\{/m.exec(source);
+      if (autoPart) {
+        resolvedOwner = autoPart[1];
+      }
+    }
+
+    if (resolvedOwner) {
+      const targetOwner = resolvedOwner.includes("::")
+        ? resolvedOwner.split("::").pop()!
+        : resolvedOwner;
       const ownerRegex = new RegExp(
-        `(?:part\\s+def|part|package|state|requirement)\\s+${targetOwner}\\b[^{]*\\{`,
+        `(?:part\\s+def|part|package|state|requirement)\\s+${targetOwner}\\b[^{;]*\\{`,
         "m",
       );
       const match = ownerRegex.exec(source);
@@ -96,6 +109,21 @@ export class SemanticEditor {
           snippet +
           source.slice(insertIndex)
         );
+      } else {
+        // Convert semicolon leaf declaration `part x;` into block `part x { ... }` so child insertion always works!
+        const leafRegex = new RegExp(
+          `([ \\t]*(?:part\\s+def|part|port\\s+def|state|action|requirement)\\s+${targetOwner}\\b[^;{]*);`,
+          "m",
+        );
+        const leafMatch = leafRegex.exec(source);
+        if (leafMatch) {
+          const replacement = `${leafMatch[1]} {\n${snippet}    }`;
+          return (
+            source.slice(0, leafMatch.index) +
+            replacement +
+            source.slice(leafMatch.index + leafMatch[0].length)
+          );
+        }
       }
     }
 

@@ -189,7 +189,7 @@ export function registerSysMLShapes(): void {
           collapseBtn: {
             ref: "header",
             refX: "100%",
-            refX2: -34,
+            refX2: -18,
             refY: 20,
             textAnchor: "middle",
             dominantBaseline: "central",
@@ -202,17 +202,6 @@ export function registerSysMLShapes(): void {
             display: "none",
           },
           drillBtn: {
-            ref: "header",
-            refX: "100%",
-            refX2: -14,
-            refY: 20,
-            textAnchor: "middle",
-            dominantBaseline: "central",
-            fontSize: 12,
-            fontFamily: "ui-monospace, monospace, sans-serif",
-            fill: "#94a3b8",
-            cursor: "pointer",
-            text: "⤢",
             display: "none",
           },
         },
@@ -406,6 +395,8 @@ export interface BuildNodeAttrsOptions {
   lodTier?: "macro" | "meso" | "micro";
   scale?: number;
   nodeWidth?: number;
+  forceHideCompartments?: boolean;
+  forceShowPortTypes?: boolean;
 }
 
 export function buildNodeAttrs(
@@ -516,7 +507,12 @@ export function buildNodeAttrs(
 
   const isCompound = options.isCompound ?? false;
   const isCollapsed = options.isCollapsed ?? false;
-  const showComps = hasCompartments && !node.collapsed && !isMacro && !isCollapsed;
+  const showComps =
+    hasCompartments &&
+    !node.collapsed &&
+    !isMacro &&
+    !isCollapsed &&
+    !options.forceHideCompartments;
 
   const w = options.nodeWidth || 220;
   const subDividerPath =
@@ -577,9 +573,7 @@ export function buildNodeAttrs(
       text: isCollapsed ? "[+]" : "[-]",
     },
     drillBtn: {
-      display: isCompound ? "block" : "none",
-      fill: theme.node.textSecondary,
-      text: "⤢",
+      display: "none",
     },
   };
 }
@@ -591,12 +585,14 @@ export function buildPortItems(
 ): Record<string, unknown>[] {
   if (!node.ports || node.ports.length === 0) return [];
 
-  const lodTier = options.lodTier || "meso";
-  const isMacro = lodTier === "macro";
+  const rawTier = options.lodTier || "meso";
+  const isMacro = rawTier === "macro";
+  const effectiveLabelTier =
+    !isMacro && options.forceShowPortTypes ? "micro" : rawTier;
 
   return node.ports.map((port) => {
     const group = port.sideHint || "W";
-    const portLabel = formatSysMLPortLabel(port, lodTier);
+    const portLabel = formatSysMLPortLabel(port, effectiveLabelTier);
     const pinGlyph = formatPortPinGlyph(port);
 
     // OMG SysML v2 / Eclipse SysON conjugation distinction:

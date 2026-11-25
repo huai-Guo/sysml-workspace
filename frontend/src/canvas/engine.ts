@@ -82,6 +82,7 @@ export class SysMLCanvasEngine {
   >();
   public drillPath: string[] = []; // Subsystem drill-down hierarchy
   private renderToken = 0;
+  private pendingRender?: { viewIR: SysMLViewIR; allViews?: Record<string, SysMLViewIR> };
 
   constructor(container: HTMLElement, options: CanvasEngineOptions = {}) {
     this.container = container;
@@ -123,7 +124,6 @@ export class SysMLCanvasEngine {
       autoResize: true,
       panning: {
         enabled: true,
-        modifiers: "space",
         eventTypes: ["leftMouseDown", "mouseWheelDown"],
       },
       mousewheel: {
@@ -230,75 +230,31 @@ export class SysMLCanvasEngine {
     try {
       this.selectionPlugin = new Selection({
         enabled: true,
-        multiple: true,
+        multiple: false,
         rubberband: false,
-        showNodeSelectionBox: true,
+        showNodeSelectionBox: false,
       });
       this.graph.use(this.selectionPlugin);
     } catch (e) {
       console.warn("Selection plugin init warning:", e);
     }
 
+    // 2. Initialize Display Preferences Popover (no CAD rubberband hijacking left-drag!)
     try {
-      this.transformPlugin = new Transform({
-        resizing: {
-          enabled: true,
-          minWidth: (node: Node) => {
-            if (node && this.isCompoundNode(node.id)) {
-              const children = this.graph.getNodes().filter((n) => {
-                const d = n.getData() as { viewNode?: SysMLViewNode } | undefined;
-                return d?.viewNode?.parentId === node.id && n.isVisible();
-              });
-              if (children.length > 0) {
-                let minX = Infinity;
-                let maxX = -Infinity;
-                for (const c of children) {
-                  const p = c.getPosition();
-                  const s = c.getSize();
-                  minX = Math.min(minX, p.x);
-                  maxX = Math.max(maxX, p.x + s.width);
-                }
-                return Math.max(200, maxX - minX + 112);
-              }
-            }
-            return 80;
-          },
-          minHeight: (node: Node) => {
-            if (node && this.isCompoundNode(node.id)) {
-              const children = this.graph.getNodes().filter((n) => {
-                const d = n.getData() as { viewNode?: SysMLViewNode } | undefined;
-                return d?.viewNode?.parentId === node.id && n.isVisible();
-              });
-              if (children.length > 0) {
-                let minY = Infinity;
-                let maxY = -Infinity;
-                for (const c of children) {
-                  const p = c.getPosition();
-                  const s = c.getSize();
-                  minY = Math.min(minY, p.y);
-                  maxY = Math.max(maxY, p.y + s.height);
-                }
-                return Math.max(100, maxY - minY + 100);
-              }
-            }
-            return 30;
-          },
+      this.layersPanel = new CadLayersPanel(container, this.graph, this.sidecar, {
+        onDisplayChange: (prefs) => {
+          this.orthoEnabled = prefs.orthoRouting;
+          this.refreshNodeAndEdgeStyles();
+          this.applyLOD(this.currentScale);
+          for (const edge of this.graph.getEdges()) {
+            edge.setRouter(
+              this.orthoEnabled
+                ? { name: "manhattan", args: { padding: 22, step: 10 } }
+                : { name: "normal" },
+            );
+          }
         },
       });
-      this.graph.use(this.transformPlugin);
-    } catch (e) {
-      console.warn("Transform plugin init warning:", e);
-    }
-
-    // 2. Initialize Selection & Popovers
-    try {
-      this.boxSelection = new CadBoxSelection(container, this.graph);
-    } catch (e) {
-      console.warn("Box selection init warning:", e);
-    }
-
-    try {
-      this.layersPanel = new CadLayersPanel(container, this.graph, this.sidecar);
     } catch (e) {
       console.warn("Layers panel init warning:", e);
     }
@@ -309,14 +265,23 @@ export class SysMLCanvasEngine {
         getSource: options.getSource,
         applySource: options.applySource,
         showNotice: options.showNotice,
-        isExpandedCompound: (nodeId: string) =>
-          this.isCompoundNode(nodeId) && !this.collapsedNodes.has(nodeId),
+        isExpandedCompound: (nodeId: string) => this.isCompoundNode(nodeId),
       });
       this.semanticEditor.attachGraph(this.graph);
     }
 
     try {
       this.palette = new SysMLPalette(container, this.graph, {
+        getDefaultParentId: () => {
+          if (this.drillPath.length > 0) {
+            const focused = this.drillPath[this.drillPath.length - 1];
+            return this.currentViewIR?.nodes.find((n) => n.id === focused)?.name;
+          }
+          const primaryContainer = this.currentViewIR?.nodes.find((n) =>
+            this.isCompoundNode(n.id),
+          );
+          return primaryContainer?.name;
+        },
         onInsert: (event: InsertElementEvent) => {
           this.semanticEditor?.handleInsertElement(event.kind, event.name, event.targetParentId);
         },
@@ -382,19 +347,34 @@ export class SysMLCanvasEngine {
 
   private renderBreadcrumbs(): void {
     this.breadcrumbsEl?.remove();
+    this.breadcrumbsEl = undefined;
+
+    // Only show top-left navigation bar when drilled inside a subsystem container
+    if (this.drillPath.length === 0) {
+      return;
+    }
+
     const breadcrumbs = document.createElement("div");
     breadcrumbs.className = "canvas-breadcrumbs";
 
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "crumb-back-btn";
+    backBtn.textContent = "← 返回上级";
+    backBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.drillUp();
+    };
+    breadcrumbs.appendChild(backBtn);
+
     const rootCrumb = document.createElement("span");
-    rootCrumb.className = `crumb-item ${this.drillPath.length === 0 ? "active" : ""}`;
-    rootCrumb.textContent = "🏠 全局视图";
+    rootCrumb.className = "crumb-item";
+    rootCrumb.textContent = "全部";
     rootCrumb.onclick = () => {
-      if (this.drillPath.length > 0) {
-        this.drillPath = [];
-        this.renderBreadcrumbs();
-        this.applyDrillFilter();
-        this.zoomFit();
-      }
+      this.drillPath = [];
+      this.renderBreadcrumbs();
+      this.applyDrillFilter();
+      this.zoomFit();
     };
     breadcrumbs.appendChild(rootCrumb);
 
@@ -439,6 +419,14 @@ export class SysMLCanvasEngine {
         if (this.container.clientWidth < 50 || this.container.clientHeight < 50) {
           return;
         }
+        // If a diagram render was queued while this tab was hidden (0x0), execute it immediately now!
+        if (this.pendingRender) {
+          const queued = this.pendingRender;
+          this.pendingRender = undefined;
+          this.graph.resize(this.container.clientWidth, this.container.clientHeight);
+          void this.render(queued.viewIR, queued.allViews);
+          return;
+        }
         resizeTimer = setTimeout(() => {
           if (
             this.container.clientWidth >= 50 &&
@@ -446,9 +434,10 @@ export class SysMLCanvasEngine {
             this.currentViewIR &&
             this.hasRenderedView()
           ) {
+            this.graph.resize(this.container.clientWidth, this.container.clientHeight);
             this.zoomFit();
           }
-        }, 150);
+        }, 120);
       });
       this.resizeObserver.observe(this.container);
     }
@@ -498,34 +487,43 @@ export class SysMLCanvasEngine {
       this.handleChildNodeMovedOrResized(node, true);
     });
 
-    // Node click handlers: collapseBtn, drillBtn, foldBtn, or source location selection
+    // Node click handlers: collapseBtn or clean selection + source location highlight
     this.graph.on("node:click", ({ node, e }) => {
       const target = e.target as SVGElement;
-      const selector = target?.getAttribute?.("data-selector");
+      const selector =
+        target?.getAttribute?.("selector") || target?.getAttribute?.("data-selector");
       const text = target?.textContent?.trim();
 
-      // 1. Collapse button clicked ([-] / [+])
       if (selector === "collapseBtn" || text === "[-]" || text === "[+]") {
+        e.stopPropagation();
         this.toggleNodeCollapse(node.id);
         return;
       }
 
-      // 2. Drill button clicked (⤢)
-      if (selector === "drillBtn" || text === "⤢") {
-        this.drillDown(node.id);
-        return;
-      }
-
-      // Highlight source in editor
       const data = node.getData() as { sourceLocation?: SourceLocation } | undefined;
       if (data && data.sourceLocation && this.onSelect) {
         this.onSelect(data.sourceLocation);
       }
     });
 
-    // Double-click on compound container title triggers drill-down (only when expanded)
-    this.graph.on("node:dblclick", ({ node }) => {
-      if (this.isCompoundNode(node.id) && !this.collapsedNodes.has(node.id)) {
+    // Clean subtle border emphasis on selected node, cleared on blank click
+    this.graph.on("node:selected", ({ node }) => {
+      node.attr("body/strokeWidth", 2.6);
+    });
+    this.graph.on("node:unselected", ({ node }) => {
+      node.attr("body/strokeWidth", this.currentThemeStyles.node.strokeWidth);
+    });
+    this.graph.on("blank:click", () => {
+      this.graph.cleanSelection();
+    });
+
+    // Double-click on any compound container cleanly enters (drills down into) that subsystem
+    this.graph.on("node:dblclick", ({ node, e }) => {
+      if (this.isCompoundNode(node.id)) {
+        e.stopPropagation();
+        if (this.collapsedNodes.has(node.id)) {
+          this.toggleNodeCollapse(node.id);
+        }
         this.drillDown(node.id);
       }
     });
@@ -540,18 +538,13 @@ export class SysMLCanvasEngine {
       this.handleScaleEvent(sx);
     });
 
-    // Keyboard shortcuts handler:
-    // - Space: Pan toggle
-    // - Ctrl+Z: Undo
-    // - Ctrl+Y / Ctrl+Shift+Z: Redo
-    // - Delete / Backspace: Safe delete
     this.onKeyDownHandler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const isInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
 
-      if (e.code === "Space" && !this.spaceDown && !isInput) {
-        this.spaceDown = true;
-        this.graph.enablePanning();
+      if (!isInput && e.key === "Escape" && this.drillPath.length > 0) {
+        e.preventDefault();
+        this.drillUp();
       } else if (!isInput && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (this.historyPlugin?.canUndo()) {
@@ -572,12 +565,7 @@ export class SysMLCanvasEngine {
       }
     };
 
-    this.onKeyUpHandler = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        this.spaceDown = false;
-        this.graph.disablePanning();
-      }
-    };
+    this.onKeyUpHandler = () => {};
 
     window.addEventListener("keydown", this.onKeyDownHandler);
     window.addEventListener("keyup", this.onKeyUpHandler);
@@ -885,6 +873,7 @@ export class SysMLCanvasEngine {
       const isCollapsed = this.collapsedNodes.has(vn.id);
 
       const size = node.getSize();
+      const prefs = this.layersPanel?.prefs;
       const refreshedAttrs = buildNodeAttrs(vn, theme, {
         depth: this.calculateNodeDepth(vn),
         isCompound,
@@ -892,12 +881,15 @@ export class SysMLCanvasEngine {
         lodTier: tier,
         scale,
         nodeWidth: size.width,
+        forceHideCompartments: prefs ? !prefs.showCompartments : false,
       });
       node.setAttrs(refreshedAttrs as any);
 
       // Port labels & internal directional glyphs
+      const labelTier =
+        tier !== "macro" && prefs?.showPortTypes ? "micro" : tier;
       for (const port of vn.ports || []) {
-        const portLabel = formatSysMLPortLabel(port, tier);
+        const portLabel = formatSysMLPortLabel(port, labelTier);
         node.portProp(port.id, "attrs/dirGlyph/display", tier === "macro" ? "none" : "block");
         if (tier === "macro" || !portLabel) {
           node.portProp(port.id, "attrs/text/display", "none");
@@ -982,11 +974,23 @@ export class SysMLCanvasEngine {
     this.collapsedEdgeEndpoints.clear();
     this.renderBreadcrumbs();
 
+    // Guard first-render when the View tab is hidden (0x0 container): queue until visible!
+    if (this.container.clientWidth < 50 || this.container.clientHeight < 50) {
+      this.pendingRender = { viewIR, allViews };
+      return;
+    }
+    this.pendingRender = undefined;
+    this.graph.resize(this.container.clientWidth, this.container.clientHeight);
+
     // 1. Run ELK layout
     const elkResult = await runElkLayout(viewIR);
 
     if (token !== this.renderToken) {
       return;
+    }
+
+    if (this.container.clientWidth >= 50 && this.container.clientHeight >= 50) {
+      this.graph.resize(this.container.clientWidth, this.container.clientHeight);
     }
 
     this.graph.clearCells();
@@ -1021,6 +1025,7 @@ export class SysMLCanvasEngine {
       const isCompound = this.isCompoundNode(node.id);
       const isCollapsed = this.collapsedNodes.has(node.id);
 
+      const prefs = this.layersPanel?.prefs;
       const attrs = buildNodeAttrs(node, theme, {
         depth,
         isCompound,
@@ -1028,10 +1033,12 @@ export class SysMLCanvasEngine {
         lodTier: this.currentLODTier,
         scale: this.currentScale,
         nodeWidth: finalWidth,
+        forceHideCompartments: prefs ? !prefs.showCompartments : false,
       });
       const portItems = buildPortItems(node, theme, {
         lodTier: this.currentLODTier,
         scale: this.currentScale,
+        forceShowPortTypes: prefs?.showPortTypes ?? false,
       });
 
       const cell = this.graph.addNode({
@@ -1183,8 +1190,17 @@ export class SysMLCanvasEngine {
       });
     }
 
-    // 5. Fit view smoothly
-    this.graph.zoomToFit({ padding: 36, maxScale: 1.2 });
+    this.layersPanel?.applyPreferences();
+
+    // 5. Fit view smoothly (both synchronous and next animation frame for reliable first-paint fit)
+    this.zoomFit();
+    if (typeof requestAnimationFrame !== "undefined") {
+      requestAnimationFrame(() => {
+        if (token === this.renderToken) {
+          this.zoomFit();
+        }
+      });
+    }
   }
 
   private buildEdgeAttrs(edge: SysMLViewEdge, theme: ThemeStyles): Record<string, any> {
@@ -1297,6 +1313,7 @@ export class SysMLCanvasEngine {
         const isCompound = this.isCompoundNode(node.id);
         const isCollapsed = this.collapsedNodes.has(node.id);
         const size = cell.getSize();
+        const prefs = this.layersPanel?.prefs;
         const attrs = buildNodeAttrs(node, theme, {
           depth,
           isCompound,
@@ -1304,6 +1321,7 @@ export class SysMLCanvasEngine {
           lodTier: this.currentLODTier,
           scale: this.currentScale,
           nodeWidth: size.width,
+          forceHideCompartments: prefs ? !prefs.showCompartments : false,
         });
         cell.setAttrs(attrs as any);
 
@@ -1463,7 +1481,7 @@ export class SysMLCanvasEngine {
   }
 
   public hasRenderedView(): boolean {
-    return Boolean(this.currentViewIR && this.graph.getNodes().length > 0);
+    return Boolean(this.currentViewIR && (this.graph.getNodes().length > 0 || this.pendingRender));
   }
 
   public destroy(): void {

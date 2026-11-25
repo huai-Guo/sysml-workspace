@@ -122,7 +122,7 @@ test("R5.2: Node attrs reflect depth tints, compound buttons, and zIndex orderin
 
   assert.strictEqual(parentAttrs.collapseBtn.display, "block", "Compound node should show collapseBtn");
   assert.strictEqual(parentAttrs.collapseBtn.text, "[-]", "Expanded compound node should show [-]");
-  assert.strictEqual(parentAttrs.drillBtn.display, "block", "Compound node should show drillBtn");
+  assert.strictEqual(parentAttrs.drillBtn.display, "none", "Drill-down uses clean double-click without redundant header icon");
 
   // 2. Leaf node attrs (depth = 2)
   const leafAttrs = buildNodeAttrs(leafNode, theme, {

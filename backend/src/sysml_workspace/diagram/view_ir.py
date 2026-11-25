@@ -211,6 +211,7 @@ class SysMLViewSummary(BaseModel):
 class SysMLViewIR(BaseModel):
     model_config = ConfigDict(extra="ignore")
     schemaVersion: Literal["2.0"] = "2.0"
+    rendererRevision: str = "syson-r7"
     sourceSha256: str
     rootPackageName: str
     viewType: Literal["general", "interconnection", "state", "requirements"]

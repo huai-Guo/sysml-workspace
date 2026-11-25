@@ -4,6 +4,7 @@ import type { SysMLViewIR, SysMLViewNode } from "../src/canvas/types";
 import { resolveTheme } from "../src/canvas/themes";
 import { runElkLayout, estimateNodeDimensions } from "../src/canvas/elk_layout";
 import { buildNodeAttrs, buildPortItems, formatSysMLPortLabel } from "../src/canvas/shapes";
+import { SemanticEditor } from "../src/canvas/semantic_editor";
 
 test("R6-SysON: Multi-line compartments anchor at top and emit crisp horizontal dividers without overlapping header", () => {
   const theme = resolveTheme("syson-clean");
@@ -240,4 +241,42 @@ test("R6-SysON: Two-zone ELK layout separates Definition catalog from left-to-ri
   // Inside `vehicle`, signal flow strictly progresses Left -> Center -> Right: b -> inv -> m
   assert.ok(posB.x + posB.width <= posInv.x, "Battery `b` must be laid out left of Inverter `inv`");
   assert.ok(posInv.x + posInv.width <= posM.x, "Inverter `inv` must be laid out left of Motor `m`");
+});
+
+test("R7-UX: Display toggles control compartments/port types and Palette inserts valid child SysML into leaf parts", () => {
+  const theme = resolveTheme("syson-clean");
+  const node: SysMLViewNode = {
+    id: "EV::Battery",
+    semanticId: "e3",
+    qualifiedName: "EV::Battery",
+    name: "Battery",
+    kind: "PartDefinition",
+    shapeCategory: "definition",
+    stereotype: "«part def»",
+    layer: "L1_Definitions",
+    compartments: [{ id: "attributes", title: "attributes", items: [{ id: "a1", text: "v: Real" }] }],
+    ports: [{ id: "p1", name: "powerOut", typeName: "PowerPort", direction: "out", conjugated: false, sideHint: "E" }],
+  };
+
+  const hiddenCompAttrs = buildNodeAttrs(node, theme, {
+    lodTier: "meso",
+    forceHideCompartments: true,
+  }) as Record<string, Record<string, unknown>>;
+  assert.strictEqual(hiddenCompAttrs.compartments.display, "none");
+
+  const forcedTypePorts = buildPortItems(node, theme, {
+    lodTier: "meso",
+    forceShowPortTypes: true,
+  }) as Array<{ attrs: Record<string, Record<string, unknown>> }>;
+  assert.strictEqual(forcedTypePorts[0].attrs.text.text, "→ powerOut: PowerPort");
+
+  // Leaf `part b : Battery;` expands cleanly into a block when inserting a child `port`
+  const editor = new SemanticEditor({
+    getSource: () => "",
+    applySource: () => {},
+  });
+  const baseSysml = `package EV {\n    part vehicle {\n        part b : Battery;\n    }\n}\n`;
+  const updated = editor.compileElement(baseSysml, "port", "ioPort_1", "b");
+  assert.ok(updated.includes("part b : Battery {"), "Leaf part should expand to block");
+  assert.ok(updated.includes("port ioPort_1;"), "New port should be inserted inside target part");
 });

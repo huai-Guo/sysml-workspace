@@ -7,78 +7,75 @@
   <aside id="sidebar" class="sidebar" aria-label="工程与会话导航">
     <div class="sidebar-header">
       <div class="wordmark">
-        <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>
+        <svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="4"/><path d="M4 16h24M16 4v24"/></svg>
         SysML<span>Workbench</span>
       </div>
-      <button id="sidebar-close-btn" class="icon-button btn-toggle-sidebar" title="折叠侧边栏" aria-label="折叠侧边栏">◧</button>
+      <button id="sidebar-close-btn" class="icon-button btn-toggle-sidebar" title="收起侧边栏" aria-label="收起侧边栏">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm4 1H2v8h4V4zm1 8h7V4H7v8z"/></svg>
+      </button>
     </div>
 
     <button id="new-session" class="btn-new-thread">
-      <span aria-hidden="true">＋</span> 新建工程会话
+      <span aria-hidden="true">＋</span> 新建工程模型
     </button>
 
     <div class="search-box">
       <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
-      <input id="session-search" class="search" type="search" placeholder="搜索模型与会话…" autocomplete="off">
+      <input id="session-search" class="search" type="search" placeholder="搜索模型…" autocomplete="off">
     </div>
 
-    <!-- Codex-style Section 1: Project Files & View -->
     <div class="sidebar-section">
       <div class="section-label">
-        <span>📁 源代码与视图 (Files)</span>
+        <span>工作区视图</span>
         <span class="section-tag">SysML v2</span>
       </div>
       <div class="project-files-list">
-        <div class="file-item active" id="sidebar-file-source" title="model.sysml (点击切换至代码编辑)">
+        <div class="file-item active" id="sidebar-file-source" title="切换至 SysML 源代码编辑器">
           <span class="file-icon">S</span>
           <div class="file-info">
             <strong class="file-title">model.sysml</strong>
-            <small id="sidebar-file-meta" class="file-meta">主模型代码</small>
+            <small id="sidebar-file-meta" class="file-meta">模型源码</small>
           </div>
-          <span class="file-badge">ACTIVE</span>
         </div>
-        <div class="file-item" id="sidebar-file-view" title="视图 · view.svg (点击切换至架构视图)">
+        <div class="file-item" id="sidebar-file-view" title="切换至交互式架构视图">
           <span class="file-icon view-icon">V</span>
           <div class="file-info">
-            <strong class="file-title">视图</strong>
-            <small class="file-meta">架构与连接视图</small>
+            <strong class="file-title">架构视图</strong>
+            <small class="file-meta">结构与拓扑图</small>
           </div>
-          <span class="file-badge">VIEW</span>
         </div>
       </div>
     </div>
 
-    <!-- Codex-style Section 2: Copilot Sessions -->
     <div class="sidebar-section flex-1">
       <div class="section-label">
-        <span>💬 建模会话 (Sessions)</span>
+        <span>模型列表</span>
         <span id="session-count" class="badge-count">0</span>
       </div>
       <nav id="sessions" aria-label="模型会话列表" class="sessions-nav"></nav>
     </div>
 
     <div class="sidebar-tools">
-      <button id="open-knowledge" class="nav-action">▤ <span>个人知识库</span></button>
+      <button id="open-knowledge" class="nav-action" type="button">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M1 2.828c.885-.37 2.154-.769 3.388-.893 1.33-.134 2.458.063 3.112.752v9.746c-.935-.53-2.12-.603-3.213-.493-1.18.12-2.37.461-3.287.811V2.828zm7.5-.141c.654-.689 1.782-.886 3.112-.752 1.234.124 2.503.523 3.388.893v9.923c-.918-.35-2.107-.692-3.287-.81-1.094-.111-2.278-.039-3.213.492V2.687z"/></svg>
+        <span>参考知识库</span>
+      </button>
     </div>
     <div class="account">
-      <div class="account-user" id="account-user-btn" role="button" tabindex="0" title="偏好设置与选项">
+      <div class="account-user" id="account-user-btn" role="button" tabindex="0" title="界面与编辑器设置">
         <span id="avatar" class="avatar">U</span>
         <strong id="identity" class="account-name"></strong>
       </div>
       <div class="account-actions">
-        <button id="open-settings" class="icon-button" title="设置" aria-label="偏好设置" aria-haspopup="true" aria-expanded="false">
+        <button id="open-settings" class="icon-button" title="偏好设置" aria-label="偏好设置" aria-haspopup="true" aria-expanded="false">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
         </button>
-        <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录">↗</button>
+        <button id="logout" class="icon-button" title="重置会话连接" aria-label="重置连接" hidden>↗</button>
       </div>
 
-      <!-- Settings Dropup (上拉选项菜单) -->
-      <div id="settings-dropup" class="settings-dropup" hidden role="menu" aria-label="偏好设置上拉选项">
+      <div id="settings-dropup" class="settings-dropup" hidden role="menu" aria-label="偏好设置">
         <div class="dropup-header">
-          <span class="dropup-title">
-            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/></svg>
-            偏好设置
-          </span>
+          <span class="dropup-title">偏好设置</span>
           <button id="reset-settings-dropup" class="dropup-action-btn" type="button" title="恢复默认">重置</button>
         </div>
 
@@ -87,7 +84,7 @@
           <div class="dropup-options-grid theme-options" role="radiogroup" aria-label="界面主题">
             <button type="button" class="dropup-opt-btn" data-setting="theme" data-value="codex-dark">
               <span class="opt-swatch theme-swatch-codex"></span>
-              <span class="opt-label">Codex 墨黑</span>
+              <span class="opt-label">墨黑暗色</span>
             </button>
             <button type="button" class="dropup-opt-btn" data-setting="theme" data-value="midnight">
               <span class="opt-swatch theme-swatch-midnight"></span>
@@ -95,11 +92,11 @@
             </button>
             <button type="button" class="dropup-opt-btn" data-setting="theme" data-value="oled">
               <span class="opt-swatch theme-swatch-oled"></span>
-              <span class="opt-label">OLED 纯黑</span>
+              <span class="opt-label">纯净暗黑</span>
             </button>
             <button type="button" class="dropup-opt-btn" data-setting="theme" data-value="light">
               <span class="opt-swatch theme-swatch-light"></span>
-              <span class="opt-label">高对比亮色</span>
+              <span class="opt-label">清爽亮色</span>
             </button>
           </div>
         </div>
@@ -108,11 +105,11 @@
           <div class="dropup-group-title">代码字体</div>
           <div class="dropup-select-row">
             <select id="dropup-font-family" class="dropup-native-select">
-              <option value="jetbrains">JetBrains Mono (推荐)</option>
+              <option value="jetbrains">JetBrains Mono</option>
               <option value="fira">Fira Code</option>
               <option value="cascadia">Cascadia Code</option>
               <option value="consolas">Consolas</option>
-              <option value="system">系统等宽 (System)</option>
+              <option value="system">系统等宽</option>
             </select>
           </div>
         </div>
@@ -120,11 +117,11 @@
         <div class="dropup-group">
           <div class="dropup-group-title">代码字号</div>
           <div class="dropup-segmented-control" role="radiogroup" aria-label="代码字号">
-            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="12px">12px</button>
-            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="13px">13px</button>
-            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="14px">14px</button>
-            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="15px">15px</button>
-            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="16px">16px</button>
+            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="12px">12</button>
+            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="13px">13</button>
+            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="14px">14</button>
+            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="15px">15</button>
+            <button type="button" class="dropup-seg-btn" data-setting="fontSize" data-value="16px">16</button>
           </div>
         </div>
 
@@ -144,231 +141,240 @@
             </div>
           </div>
         </div>
-
-        <div class="dropup-divider"></div>
-
-        <div class="dropup-footer">
-          <button id="dropup-logout" class="dropup-menu-action danger" type="button" role="menuitem">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-              <path d="M10 12.5a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-7A1.5 1.5 0 0 0 1 3.5v9A1.5 1.5 0 0 0 2.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
-              <path d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
-            </svg>
-            <span>退出工作空间</span>
-          </button>
-        </div>
       </div>
     </div>
   </aside>
+
   <div class="work-area">
     <header class="app-header">
       <div class="header-left">
         <button id="toggle-sidebar" class="icon-button btn-toggle-sidebar" title="展开/收起侧边栏" aria-label="展开/收起侧边栏">
-          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm4 1H2v8h4V4zm1 8h7V4H7v8z"/></svg>
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor"><path d="M2 3h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm4 1H2v8h4V4zm1 8h7V4H7v8z"/></svg>
         </button>
         <div class="breadcrumb">
           <span class="crumb-root">模型</span><span class="slash">/</span>
-          <button id="rename-session" title="点击或双击重命名模型">未命名模型</button>
+          <button id="rename-session" title="点击修改模型名称">未命名模型</button>
           <button id="btn-edit-title" class="icon-button edit-title-btn" title="重命名模型">✎</button>
         </div>
         <span id="save-state" class="save-state" role="status"><i class="save-dot"></i>已保存</span>
       </div>
 
-      <div class="header-center">
-        <button id="render-run" class="btn-run-action" title="编译验证并刷新视图 (Ctrl+Enter)">
-          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M4 3l9 5-9 5V3z"/></svg>
-          <span>刷新视图</span>
-        </button>
-        <button id="format-code" class="button secondary compact" title="格式化排版 (Shift+Alt+F)">
-          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M2 3h12v2H2zm0 4h8v2H2zm0 4h12v2H2z"/></svg>
-          <span>排版格式化</span>
-        </button>
-        <button id="save-draft" class="button ghost compact" title="保存草稿 (Ctrl+S)">保存</button>
-      </div>
-
       <div class="header-right">
-        <button id="btn-layout-reset" class="button ghost compact" title="重置工作台布局 (合并标签页与恢复默认分栏)">↺ 重置布局</button>
-        <button id="open-knowledge" class="button ghost compact" title="工程规范与参考知识库">▤ 知识库</button>
-        <button id="model-settings" class="icon-button" aria-label="模型设置" title="模型设置">⋯</button>
+        <button id="btn-split-side-by-side" class="tb-btn tb-btn-ghost" type="button" title="代码与架构视图上下同屏对照">
+          <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11zM2.5 2a.5.5 0 0 0-.5.5V7h12V2.5a.5.5 0 0 0-.5-.5h-11zM14 8H2v5.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V8z"/></svg>
+          <span>同屏对照</span>
+        </button>
+        <button id="btn-layout-reset" class="tb-btn tb-btn-ghost" type="button" title="合并拆分窗口并恢复默认面板布局">恢复默认面板</button>
       </div>
     </header>
+
     <div id="notice" class="notice" role="status" hidden><span id="notice-text"></span><button id="dismiss-notice" aria-label="关闭提示">×</button></div>
-    <div id="conflict" class="conflict-bar" role="alert" hidden><span>另一页面已更新此模型。本地修改仍保留。</span><button id="load-server" class="button secondary compact">载入服务器版本</button><button id="fork-draft" class="button primary compact">另存为新模型</button></div>
+    <div id="conflict" class="conflict-bar" role="alert" hidden><span>另一页面已更新此模型。本地修改仍保留。</span><button id="load-server" class="tb-btn">载入服务器版本</button><button id="fork-draft" class="tb-btn tb-btn-primary">另存为新模型</button></div>
+
     <div class="workbench" id="workbench">
-      <!-- Left Main Column (can hold 1 or 2 dock panes: top and bottom) -->
       <div class="workbench-main" id="workbench-main">
         <!-- 1. Primary Left Dock Pane -->
         <section class="dock-pane editor-pane" id="editor-region" data-pane-id="editor-region" aria-label="模型编辑与视图区">
           <div class="pane-heading">
-            <!-- Proximity Dockable Tab Bar: tabs can be dragged directly between panes -->
             <div class="dock-tabbar horizontal-tabs" id="tabbar-editor-region" role="tablist" aria-label="主工作区标签页"></div>
             <div class="pane-actions">
-              <button id="btn-maximize-editor" class="icon-button window-btn" title="最大化/还原">⤢</button>
+              <button id="btn-maximize-editor" class="icon-button window-btn" title="最大化/还原当前窗口">⤢</button>
             </div>
           </div>
           <div class="pane-body" id="pane-body-editor-region">
-            <!-- Content 1: Code Editor -->
+            <!-- Content 1: Code Editor (Contextual Toolbar Inside Editor Pane) -->
             <div class="panel-content" id="panel-content-editor" data-tab-id="editor">
-              <div id="source-editor" class="source-editor"></div>
-              <div class="editor-status">
-                <span id="editor-line-count" class="source-line-count">0 行</span>
-                <button id="load-example" class="text-button">插入电力系统示例</button>
-                <div class="editor-file-tools">
-                  <button id="import-source" class="button ghost compact" title="导入 .sysml 文件">导入</button>
-                  <button id="download-draft" class="button ghost compact" title="导出当前代码">导出</button>
-                  <input id="file-input" type="file" accept=".sysml,.txt" hidden>
+              <div class="pane-toolbar editor-toolbar">
+                <div class="pane-toolbar-left">
+                  <span id="editor-line-count" class="toolbar-meta source-line-count">0 行</span>
+                  <span class="toolbar-sep"></span>
+                  <button id="load-example" class="tb-btn tb-btn-ghost" type="button" title="载入标准电动汽车动力系统 SysML v2 示例">载入示例</button>
+                </div>
+                <div class="pane-toolbar-right">
+                  <button id="format-code" class="tb-btn" type="button" title="代码缩进与排版格式化 (Shift+Alt+F)">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 3h12v1.5H2zm0 3.5h8V8H2zm0 3.5h12v1.5H2zm0 3.5h9V15H2z"/></svg>
+                    <span>格式化</span>
+                  </button>
+                  <button id="save-draft" class="tb-btn" type="button" title="保存当前代码 (Ctrl+S)">
+                    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4.414A1 1 0 0 0 14.707 3.7L12.3 1.293A1 1 0 0 0 11.586 1H2zm2 1h7v4H4V2zm0 7h8v5H4V9z"/></svg>
+                    <span>保存</span>
+                  </button>
+                  <button id="import-source" class="tb-btn" type="button" title="从本地导入 .sysml 源码">导入</button>
+                  <button id="download-draft" class="tb-btn" type="button" title="下载保存为 .sysml 文件">导出</button>
+                  <input id="file-input" type="file" accept=".sysml,.kerml,.txt" hidden>
+                  <button id="render-run" class="tb-btn tb-btn-primary" type="button" title="编译验证代码并生成架构视图 (Ctrl+Enter)">
+                    <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M4 2.5l9 5.5-9 5.5v-11z"/></svg>
+                    <span>刷新视图</span>
+                  </button>
                 </div>
               </div>
+              <div id="source-editor" class="source-editor"></div>
               <!-- Hidden underlying form for state backwards-compatibility -->
               <div class="composer" hidden>
-                <div class="composer-heading">
-                  <label for="task">本次操作</label>
-                  <select id="task">
-                    <option value="render" selected>生成视图</option>
-                    <option value="validate">验证代码</option>
-                    <option value="extract">提取实体</option>
-                    <option value="generate">自然语言生成</option>
-                    <option value="revise">按需求修改</option>
-                    <option value="repair">修复错误代码</option>
-                  </select>
-                </div>
+                <select id="task">
+                  <option value="render" selected>生成视图</option>
+                  <option value="validate">验证代码</option>
+                  <option value="extract">提取实体</option>
+                  <option value="generate">自然语言生成</option>
+                  <option value="revise">按需求修改</option>
+                  <option value="repair">修复错误代码</option>
+                </select>
                 <div id="prompt-area" hidden>
                   <label for="prompt" id="prompt-label">工程需求</label>
-                  <textarea id="prompt" maxlength="12000" rows="3" placeholder="描述组成、属性、端口和连接关系…"></textarea>
+                  <textarea id="prompt" maxlength="12000" rows="3"></textarea>
                 </div>
-                <div class="composer-footer">
-                  <label id="render-option" class="check"><input id="render" type="checkbox" checked>同时生成视图</label>
-                  <span id="capability-note" class="muted"></span>
-                  <button id="submit" class="button primary">运行 <span aria-hidden="true">→</span></button>
-                </div>
+                <div id="render-option"><input id="render" type="checkbox" checked></div>
+                <span id="capability-note"></span>
+                <button id="submit" type="button">运行</button>
               </div>
             </div>
 
-            <!-- Content 2: Architecture View (架构视图) -->
+            <!-- Content 2: Architecture View (Contextual Unified Toolbar Inside View Pane) -->
             <div class="panel-content" id="panel-content-view" data-tab-id="view">
               <div id="tab-diagram" class="diagram-tab" role="region" aria-label="SysML 架构视图">
-                <div class="diagram-toolbar">
+                <div class="pane-toolbar diagram-toolbar">
                   <div class="diagram-toolbar-left">
                     <div class="view-type-tabs" id="view-type-selector" role="tablist" aria-label="架构视图模式">
-                      <button class="view-type-btn active" data-view="general" role="tab" aria-selected="true" title="综合结构视图 (General)">🌐 结构</button>
-                      <button class="view-type-btn" data-view="interconnection" role="tab" aria-selected="false" title="内部端口互联视图 (Interconnection)">🔌 互联</button>
-                      <button class="view-type-btn" data-view="state" role="tab" aria-selected="false" title="状态机行为视图 (State Machine)">⚡ 状态</button>
-                      <button class="view-type-btn" data-view="requirements" role="tab" aria-selected="false" title="需求满足追溯视图 (Requirements)">🎯 需求</button>
+                      <button class="view-type-btn active" data-view="general" role="tab" aria-selected="true" title="综合结构视图 (General View)">结构</button>
+                      <button class="view-type-btn" data-view="interconnection" role="tab" aria-selected="false" title="部件端口互联视图 (Interconnection View)">互联</button>
+                      <button class="view-type-btn" data-view="state" role="tab" aria-selected="false" title="状态转移行为视图 (State View)">状态</button>
+                      <button class="view-type-btn" data-view="requirements" role="tab" aria-selected="false" title="需求满足追溯视图 (Requirements View)">需求</button>
                     </div>
-                    <span id="diagram-summary" class="diagram-summary"></span>
+                    <span id="diagram-summary" class="toolbar-meta"></span>
                   </div>
                   <div class="diagram-controls">
+                    <button id="btn-quick-render" class="tb-btn tb-btn-primary" type="button" title="重新编译源码并刷新架构视图">
+                      <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><path d="M4 2.5l9 5.5-9 5.5v-11z"/></svg>
+                      <span>刷新视图</span>
+                    </button>
+                    <button id="btn-view-format" class="tb-btn" type="button" title="格式化源码缩进">格式化</button>
+                    <button id="btn-view-save" class="tb-btn" type="button" title="保存当前模型草稿 (Ctrl+S)">保存</button>
+                    <span class="toolbar-sep"></span>
                     <div class="dropdown-wrap" id="palette-dropdown-wrap">
-                      <button id="toggle-palette-btn" class="button ghost compact" title="新建 SysML 图元">❖ 新建图元 ▾</button>
+                      <button id="toggle-palette-btn" class="tb-btn" type="button" title="在模型中新建包、定义、部件、端口或状态">
+                        <span>＋ 新建图元</span>
+                        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M2.5 4.5L6 8l3.5-3.5H2.5z"/></svg>
+                      </button>
                       <div id="palette-menu-popover" class="canvas-palette-popover" hidden></div>
                     </div>
                     <div class="dropdown-wrap" id="layers-dropdown-wrap">
-                      <button id="toggle-layers-btn" class="button ghost compact" title="语义元素显隐过滤与对齐">≡ 过滤与对齐 ▾</button>
+                      <button id="toggle-layers-btn" class="tb-btn" type="button" title="配置隔间、端口类型与定义卡显隐">
+                        <span>显示项</span>
+                        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M2.5 4.5L6 8l3.5-3.5H2.5z"/></svg>
+                      </button>
                       <div id="layers-menu-popover" class="canvas-layers-popover" hidden></div>
                     </div>
-                    <select id="canvas-theme-select" class="select-compact" title="画布制图皮肤" aria-label="画布制图皮肤">
-                      <option value="auto">🎨 跟随主题</option>
-                      <option value="cad-blueprint">🌌 深邃蓝图</option>
-                      <option value="syson-clean">☀️ 现代亮色</option>
-                      <option value="iso-drafting">📄 论文纯净黑白</option>
+                    <button id="reset-layout" class="tb-btn" type="button" title="清除手动拖拽位置并重新自动排版">自动排版</button>
+                    <select id="canvas-theme-select" class="tb-select" title="画布配色风格" aria-label="画布配色风格">
+                      <option value="auto">跟随主题</option>
+                      <option value="cad-blueprint">深色蓝图</option>
+                      <option value="syson-clean">清爽亮色</option>
+                      <option value="iso-drafting">黑白线框</option>
                     </select>
-                    <button id="btn-quick-render" class="button secondary compact" title="重新编译并刷新视图">🔄 刷新</button>
-                    <button id="reset-layout" class="button ghost compact" title="重置手工位置并恢复自动排版">⟲ 重排</button>
-                    <button id="btn-import-diagram" class="button secondary compact" title="导入文件 (.sysml / .drawio / .json / .svg)">📥 导入</button>
+                    <button id="btn-import-diagram" class="tb-btn" type="button" title="导入 .sysml / .drawio / .json / .svg">导入</button>
                     <input id="diagram-file-input" type="file" accept=".sysml,.kerml,.drawio,.xml,.json,.svg" hidden>
                     <div class="dropdown-wrap" id="export-dropdown-wrap">
-                      <button id="btn-export-menu" class="button primary compact" title="全格式导出中心 (Draw.io / PNG / SVG / JSON)">📤 导出 ▾</button>
+                      <button id="btn-export-menu" class="tb-btn" type="button" title="导出架构图或代码">
+                        <span>导出</span>
+                        <svg viewBox="0 0 12 12" width="10" height="10" fill="currentColor"><path d="M2.5 4.5L6 8l3.5-3.5H2.5z"/></svg>
+                      </button>
                       <div id="export-menu-popover" class="export-menu-popover" hidden>
-                        <button class="export-menu-item" data-export="drawio">🔷 可编辑图 (.drawio)</button>
-                        <button class="export-menu-item" data-export="png-2x">🖼 出版级图片 (.png 2x)</button>
-                        <button class="export-menu-item" data-export="png-4x">🖼 论文超清图 (.png 4x)</button>
-                        <button class="export-menu-item" data-export="svg">✒️ 矢量图 (.svg 独立版)</button>
+                        <button class="export-menu-item" type="button" data-export="png-2x">高清图片 (.png 2x)</button>
+                        <button class="export-menu-item" type="button" data-export="png-4x">论文印刷图 (.png 4x)</button>
+                        <button class="export-menu-item" type="button" data-export="svg">矢量图 (.svg)</button>
+                        <button class="export-menu-item" type="button" data-export="drawio">Draw.io 可编辑图 (.drawio)</button>
                         <div class="export-menu-divider"></div>
-                        <button class="export-menu-item" data-export="json">📦 工作台工程包 (.sysmlwb.json)</button>
-                        <button class="export-menu-item" data-export="sysml">📄 纯代码 (.sysml)</button>
+                        <button class="export-menu-item" type="button" data-export="json">完整工程包 (.sysmlwb.json)</button>
+                        <button class="export-menu-item" type="button" data-export="sysml">SysML 源码 (.sysml)</button>
                       </div>
                     </div>
-                    <button data-download="diagram.svg" class="button secondary compact" hidden disabled>下载 SVG</button>
+                    <button data-download="diagram.svg" hidden disabled>下载 SVG</button>
                   </div>
                 </div>
                 <div id="diagram-viewport" class="diagram-viewport" tabindex="0" aria-label="交互式架构视图画布">
-                  <!-- Stale View Retention Overlay -->
                   <div id="canvas-stale-banner" class="canvas-stale-banner" hidden>
-                    <span class="stale-dot">●</span> <span>当前代码存在语法错误 · 正在显示最近一次有效快照</span>
+                    <span class="stale-dot">●</span> <span>当前代码有语法错误 · 正在保留最近一次有效视图</span>
                   </div>
-                  <!-- Dynamic Progressive Loading Skeleton -->
                   <div id="diagram-loading-skeleton" class="diagram-skeleton" hidden>
                     <div class="skeleton-preview-box">
                       <div class="skeleton-shimmer"></div>
                       <div class="skeleton-spinner"></div>
                     </div>
                     <div class="skeleton-info">
-                      <strong class="skeleton-title" id="skeleton-title-text">正在动态解析与渲染架构视图…</strong>
-                      <p class="skeleton-sub">语义模型提取 · 实体关联拓扑分析 · ELK 正交布线中</p>
+                      <strong class="skeleton-title" id="skeleton-title-text">正在编译解析并排布架构视图…</strong>
+                      <p class="skeleton-sub">SysML v2 语义提取 · 端口流向推导 · 正交布线中</p>
                     </div>
                   </div>
                   <div id="sysml-canvas-container" class="sysml-canvas-container"></div>
                   <img id="diagram-image" alt="已验证 SysML 的语义视图" hidden>
                   <div id="diagram-empty" class="empty-state">
                     <svg viewBox="0 0 240 150" aria-hidden="true"><path d="M120 47v29M53 76h134M53 76v24M187 76v24"/><rect x="82" y="15" width="76" height="32" rx="5"/><rect x="16" y="100" width="74" height="32" rx="5"/><rect x="150" y="100" width="74" height="32" rx="5"/><path class="empty-detail" d="M98 31h44M34 116h38M169 116h38"/></svg>
-                    <h3>尚未生成视图</h3>
-                    <p>在代码编辑器中编写 SysML 点击【刷新视图】，或在右侧向 AI 助手提出建模指示。</p>
-                    <button id="empty-example" class="button secondary">打开示例模型 <span aria-hidden="true">↗</span></button>
+                    <h3>尚未生成架构视图</h3>
+                    <p>点击上方【刷新视图】即可编译当前 SysML v2 模型并生成交互式拓扑图。</p>
+                    <button id="empty-example" class="tb-btn tb-btn-primary" type="button">载入示例并生成视图</button>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- Content 3: Run & Diagnostics (运行情况与诊断) -->
+            <!-- Content 3: Model Diagnostics & Element Outline (清晰易懂的语法检查与模型大纲) -->
             <div class="panel-content" id="panel-content-diagnostics" data-tab-id="diagnostics">
               <div id="run-progress" class="run-progress" hidden>
                 <span class="spinner" aria-hidden="true"></span>
-                <div><strong id="phase-label">已加入队列</strong><small id="run-elapsed"></small></div>
-                <button id="cancel-run" class="button secondary compact">取消任务</button>
-                <button id="retry-poll" class="button secondary compact" hidden>重新连接</button>
+                <div><strong id="phase-label">正在验证模型</strong><small id="run-elapsed"></small></div>
+                <button id="cancel-run" class="tb-btn" type="button">取消</button>
+                <button id="retry-poll" class="tb-btn" type="button" hidden>重试</button>
               </div>
-              <div id="stale-result" class="stale-result" hidden>草稿已修改 · 当前视图仍对应上次运行的代码</div>
+              <div id="stale-result" class="stale-result" hidden>代码已修改 · 点击【刷新视图】重新运行语法检查</div>
               <div id="result-error" class="result-error" role="alert" hidden></div>
 
-              <div id="tab-diagnostics" class="diagnostics-viewport" role="region" aria-label="控制台与运行诊断">
+              <div id="tab-diagnostics" class="diagnostics-viewport" role="region" aria-label="模型语法检查与元素大纲">
                 <div id="quality" class="console-summary-card"></div>
-                <div class="console-section-title">编译与代码诊断 (Diagnostics)</div>
-                <div id="diagnostics" class="diagnostic-list"></div>
-                <div class="console-section-title">运行资源与性能指标 (Performance & Usage)</div>
-                <div id="run-facts" class="console-stats-grid"></div>
-                <details class="trace-details"><summary>执行阶段与追溯信息</summary><ol id="timeline"></ol><p id="run-reference" class="mono"></p></details>
+
+                <div class="inspection-section">
+                  <div class="console-section-title">语法与语义错误检查</div>
+                  <div id="diagnostics" class="diagnostic-list"></div>
+                </div>
+
+                <div class="inspection-section flex-outline">
+                  <div class="outline-header-row">
+                    <div class="console-section-title">模型元素结构大纲（点击任意元素定位源码行）</div>
+                    <input id="entity-search" class="outline-search-input" type="search" placeholder="过滤包 / 定义 / 部件 / 端口…" autocomplete="off">
+                  </div>
+                  <div id="entities" class="entity-outline-list"></div>
+                </div>
               </div>
 
-              <!-- Compatibility hidden tabs for results.ts and history -->
+              <!-- Compatibility hidden nodes -->
               <div id="tab-code" class="result-tab" hidden>
-                <div class="result-toolbar"><span>本次运行的完整源代码</span><div><button id="apply-result" class="button secondary compact" disabled>继续编辑</button><button id="copy-result" class="button ghost compact" disabled>复制</button><button data-download="model.sysml" class="button ghost compact" disabled>下载代码</button></div></div>
+                <button id="apply-result" type="button" disabled></button>
+                <button id="copy-result" type="button" disabled></button>
+                <button data-download="model.sysml" type="button" disabled></button>
                 <div id="result-editor" class="result-editor"></div>
-                <div id="result-hash" class="panel-footnote">运行后可追溯到源代码版本。</div>
+                <div id="result-hash"></div>
               </div>
               <div id="tab-entities" class="result-tab" hidden>
-                <div class="result-toolbar"><input id="entity-search" type="search" placeholder="搜索..." hidden><button data-download="entities.json" hidden></button></div>
-                <div id="entities" hidden></div>
+                <button data-download="entities.json" hidden></button>
                 <span id="entity-count" hidden>0</span>
               </div>
               <div id="tab-history" class="result-tab" hidden>
-                <div class="result-toolbar"><span>每次运行独立保存，可以随时回看</span><button id="refresh-history" class="button ghost compact">刷新</button></div>
+                <button id="refresh-history" type="button"></button>
                 <div id="history" class="history-list"></div>
-                <button id="more-history" class="button secondary" hidden>加载更早记录</button>
+                <button id="more-history" type="button" hidden></button>
               </div>
               <span id="diagnostic-count" hidden>0</span>
             </div>
           </div>
-          <!-- Split Bottom Drop Overlay -->
           <div class="pane-split-overlay drop-overlay-bottom" id="drop-overlay-bottom">
-            <div class="drop-hint-pill">⬇ 向下拆分分栏</div>
+            <div class="drop-hint-pill">⬇ 向下拆分窗口</div>
           </div>
         </section>
 
-        <!-- Horizontal Splitter between Top and Bottom Left Panes (visible when bottom pane has tabs) -->
-        <div id="splitter-editor-view" class="splitter splitter-horizontal" title="按住上下拖拽调整高度，双击重置 (50%)">
+        <div id="splitter-editor-view" class="splitter splitter-horizontal" title="上下拖拽调整分栏比例，双击恢复均分">
           <div class="splitter-grip"></div>
         </div>
 
-        <!-- 2. Secondary Left Dock Pane (Split Bottom Pane, hidden by default) -->
+        <!-- 2. Secondary Left Dock Pane -->
         <section class="dock-pane view-pane" id="view-region" data-pane-id="view-region" aria-label="工作台下副区">
           <div class="pane-heading">
             <div class="dock-tabbar horizontal-tabs" id="tabbar-view-region" role="tablist" aria-label="下区分栏标签页"></div>
@@ -380,47 +386,47 @@
         </section>
       </div>
 
-      <!-- Vertical Splitter between Left Column and AI Copilot (LeetCode style) -->
-      <div id="splitter-main-copilot" class="splitter splitter-vertical" title="按住左右拖拽调整分栏宽度，双击重置 (62%/38%)">
+      <div id="splitter-main-copilot" class="splitter splitter-vertical" title="左右拖拽调整宽度，双击恢复默认比例">
         <div class="splitter-grip"></div>
       </div>
 
-      <!-- 3. Right Dock Column: AI 助手 (glm-5.3) -->
+      <!-- 3. Right Dock Column: AI 助手 -->
       <section class="dock-pane copilot-pane" id="copilot-region" data-pane-id="copilot-region" aria-label="AI 助手交互区">
         <div class="pane-heading">
           <div class="dock-tabbar horizontal-tabs" id="tabbar-copilot-region" role="tablist" aria-label="右侧分栏标签页"></div>
           <div class="pane-actions">
-            <button id="clear-copilot-chat" class="icon-button" title="清空对话历史">🧹</button>
+            <button id="clear-copilot-chat" class="icon-button" title="清空对话记录">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+            </button>
             <button id="btn-maximize-copilot" class="icon-button window-btn" title="最大化/还原 AI 助手">⤢</button>
           </div>
         </div>
         <div class="pane-body" id="pane-body-copilot-region">
-          <!-- Content 4: AI Copilot -->
           <div class="panel-content" id="panel-content-copilot" data-tab-id="copilot">
             <div class="copilot-chat" id="copilot-chat">
               <div class="copilot-msg assistant">
-                <div class="msg-avatar">🤖</div>
+                <div class="msg-avatar">AI</div>
                 <div class="msg-body">
-                  <p><strong>你好！我是 SysML AI 伴随建模助手 (glm-5.3)。</strong></p>
-                  <p>你可以直接向我描述你希望构建的系统架构，如“生成一个新能源车动力总成系统”；或对当前代码增量修改与错误自愈。</p>
+                  <p><strong>你好！我是 SysML v2 智能建模助手。</strong></p>
+                  <p>可直接输入系统需求生成模型、增量修改架构，或一键修复编译诊断错误。</p>
                 </div>
               </div>
             </div>
             <div class="copilot-pills">
-              <button type="button" class="copilot-pill" data-prompt="生成一个双电机驱动的电动汽车动力系统模型">🚗 电动动力系统</button>
-              <button type="button" class="copilot-pill" data-prompt="根据当前模型，补充散热风扇与温度传感器，并建立控制连接">➕ 补充温控系统</button>
-              <button type="button" class="copilot-pill" data-prompt="为当前系统的电源输出端口添加双向过流保护限制">🛡️ 过流保护</button>
-              <button type="button" class="copilot-pill" data-prompt="检查当前模型结构并自愈修复任何语法或类型错误">🩺 语法自愈修复</button>
+              <button type="button" class="copilot-pill" data-prompt="生成一个双电机驱动的电动汽车动力系统模型">双电机动力系统</button>
+              <button type="button" class="copilot-pill" data-prompt="根据当前模型，补充散热风扇与温度传感器，并建立控制连接">补充温控子系统</button>
+              <button type="button" class="copilot-pill" data-prompt="为当前系统补充工作状态机（待机、运行、故障保护）与状态转移">添加状态机行为</button>
+              <button type="button" class="copilot-pill" data-prompt="检查当前模型结构并自愈修复任何语法或类型错误">自愈修复报错</button>
             </div>
             <div class="copilot-composer">
-              <textarea id="copilot-input" rows="2" placeholder="输入建模需求或修改指示 (Enter 发送，Shift+Enter 换行)..."></textarea>
+              <textarea id="copilot-input" rows="2" placeholder="输入系统建模需求或修改指令 (Enter 发送，Shift+Enter 换行)…"></textarea>
               <div class="copilot-composer-footer">
-                <label class="auto-apply-check" title="生成完成后自动将代码应用至编辑器并刷新视图">
+                <label class="auto-apply-check" title="生成完成后自动同步至编辑器并刷新架构图">
                   <input type="checkbox" id="auto-apply-code" checked>
-                  <span>自动应用到代码</span>
+                  <span>自动应用并刷新视图</span>
                 </label>
-                <button id="copilot-send" class="button primary compact">
-                  <span>发送指令</span>
+                <button id="copilot-send" class="tb-btn tb-btn-primary" type="button">
+                  <span>发送</span>
                   <span aria-hidden="true">→</span>
                 </button>
               </div>
@@ -429,27 +435,27 @@
         </div>
       </section>
 
-      <!-- Right Split Drop Overlay (visible when dragging near right edge if right pane is collapsed) -->
       <div class="workbench-split-overlay drop-overlay-right" id="workbench-drop-right">
-        <div class="drop-hint-pill">➡ 向右拆分分栏</div>
+        <div class="drop-hint-pill">➡ 向右拆分窗口</div>
       </div>
     </div>
+
     <footer class="status-bar">
       <div class="status-bar-left">
         <span id="source-count">0 行</span>
-        <span id="save-state" class="save-state"><i class="save-dot"></i>已保存</span>
+        <span id="memory-label" hidden></span>
       </div>
       <div class="status-bar-right">
-        <span id="memory-label" class="status-pill">记忆开启</span>
         <span class="status-pill">UTF-8</span>
-        <span class="status-pill">SysML v2</span>
+        <span class="status-pill">OMG SysML v2 Pilot 0.62</span>
         <span class="status-pill">glm-5.3</span>
       </div>
     </footer>
   </div>
 </div>
+
 <dialog id="modal" aria-labelledby="modal-title"><h2 id="modal-title"></h2><p id="modal-description"></p><label class="sr-only" for="modal-input">模型名称</label><input id="modal-input" maxlength="200" hidden><div id="modal-actions" class="dialog-actions"></div></dialog>
-<dialog id="knowledge-modal" class="wide-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><span class="small-label">KNOWLEDGE</span><h2 id="knowledge-title">个人知识库</h2></div><button id="close-knowledge" class="icon-button" aria-label="关闭知识库">×</button></div><div id="documents"></div><form id="knowledge-form"><label for="document-title">资料名称</label><input id="document-title" maxlength="200" required placeholder="例如：电气建模规范"><label for="document-content">资料内容</label><textarea id="document-content" rows="5" required placeholder="粘贴资料正文，最多 32 KiB"></textarea><p id="knowledge-error" role="alert"></p><div class="dialog-actions"><button id="save-document" type="submit" class="button primary">保存资料</button></div></form></dialog>
+<dialog id="knowledge-modal" class="wide-dialog" aria-labelledby="knowledge-title"><div class="dialog-heading"><div><span class="small-label">KNOWLEDGE</span><h2 id="knowledge-title">参考知识库</h2></div><button id="close-knowledge" class="icon-button" aria-label="关闭知识库">×</button></div><div id="documents"></div><form id="knowledge-form"><label for="document-title">资料名称</label><input id="document-title" maxlength="200" required placeholder="例如：电气接口建模规范"><label for="document-content">资料内容</label><textarea id="document-content" rows="5" required placeholder="粘贴规范或领域知识正文，最多 32 KiB"></textarea><p id="knowledge-error" role="alert"></p><div class="dialog-actions"><button id="save-document" type="submit" class="tb-btn tb-btn-primary">保存资料</button></div></form></dialog>
 <dialog id="status-modal" aria-labelledby="status-title" hidden><div class="dialog-heading"><h2 id="status-title">服务状态</h2><button id="close-status" class="icon-button" aria-label="关闭服务状态">×</button></div><div id="capabilities"></div></dialog>
 
 <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>

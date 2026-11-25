@@ -62,8 +62,12 @@ const results = new Results(
   api,
   fail,
   (source, skipConfirm) => void applySource(source, skipConfirm),
-  (loc) => sourceEditor.go(loc),
+  (loc) => {
+    layoutManager.focusEditor();
+    sourceEditor.go(loc);
+  },
   () => sourceEditor.value,
+  (newSource) => void applyCanvasEditAndRender(newSource),
 );
 const initialSettings = initSettings((settings) => {
   sourceEditor.setLineWrapping(settings.lineWrap === "on");
@@ -160,16 +164,23 @@ function updateControls() {
         : task === "render" && !available
           ? "结构图服务暂不可用"
           : "";
-  const button = el<HTMLButtonElement>("submit");
-  el<HTMLButtonElement>("logout").disabled = submitting || switching || creating;
-  button.textContent = submitting ? "正在提交…" : taskNames[task];
-  button.disabled = submitting || switching || !sessionId || !available;
+  const button = optEl<HTMLButtonElement>("submit");
+  const logoutBtn = optEl<HTMLButtonElement>("logout");
+  if (logoutBtn) logoutBtn.disabled = submitting || switching || creating;
+  if (button) {
+    button.textContent = submitting ? "正在提交…" : taskNames[task];
+    button.disabled = submitting || switching || !sessionId || !available;
+  }
   el<HTMLButtonElement>("new-session").disabled =
     creating || switching || submitting;
-  const modelSettingsBtn = optEl<HTMLButtonElement>("model-settings");
-  if (modelSettingsBtn) modelSettingsBtn.disabled = switching || !sessionId;
   el<HTMLButtonElement>("rename-session").disabled = switching || !sessionId;
   el<HTMLButtonElement>("save-draft").disabled = switching || !buffer;
+  const viewSaveBtn = optEl<HTMLButtonElement>("btn-view-save");
+  if (viewSaveBtn) viewSaveBtn.disabled = switching || !buffer;
+  const renderRunBtn = optEl<HTMLButtonElement>("render-run");
+  if (renderRunBtn) renderRunBtn.disabled = submitting || switching || !sessionId;
+  const quickRenderBtn = optEl<HTMLButtonElement>("btn-quick-render");
+  if (quickRenderBtn) quickRenderBtn.disabled = submitting || switching || !sessionId;
 }
 function edit(draft: Draft) {
   if (!buffer) return;
@@ -388,8 +399,25 @@ async function selectSession(id: string, skipSave = false) {
     if (!selection.accepts(ticket)) return;
     const run =
       historyRows.find((r) => r.id === requestedRun) || historyRows[0];
-    if (run) await viewRun(run.id);
-    else results.tab("diagram");
+    if (run) {
+      await viewRun(run.id);
+      const rev = results.current?.result?.diagram?.view_ir?.rendererRevision;
+      if (rev !== "syson-r7" && session.draft.sysml_source.trim()) {
+        setTimeout(() => {
+          if (!submitting && sessionId === session.id) {
+            void submitRun("render", undefined, true);
+          }
+        }, 60);
+      }
+    } else if (session.draft.sysml_source.trim()) {
+      setTimeout(() => {
+        if (!submitting && sessionId === session.id) {
+          void submitRun("render", undefined, true);
+        }
+      }, 60);
+    } else {
+      results.tab("diagram");
+    }
   } finally {
     switching = false;
     updateControls();
@@ -433,6 +461,15 @@ async function createSession(value?: WorkspaceValue) {
     updateControls();
   }
 }
+async function applyCanvasEditAndRender(source: string) {
+  if (!buffer) return;
+  sourceEditor.value = source;
+  el<HTMLSelectElement>("task").value = "render";
+  edit({ ...buffer.value.draft, task: "render", sysml_source: source });
+  await save().catch(fail);
+  await submitRun("render");
+}
+
 async function applySource(source: string, skipConfirm = false) {
   if (!buffer) return;
   if (!skipConfirm && sourceEditor.value && sourceEditor.value !== source) {
@@ -799,14 +836,16 @@ function notifyCopilotRunFailed(run: Run) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-async function submitRun(overrideTask?: Task, overrideRequest?: string) {
+async function submitRun(overrideTask?: Task, overrideRequest?: string, silentTabKeep = false) {
   if (submitting || switching || !buffer || !sessionId) return;
   const task = overrideTask || buffer.value.draft.task;
   const req = overrideRequest !== undefined ? overrideRequest : buffer.value.draft.request;
 
-  // Immediately switch to the target view and show dynamic progressive loading!
+  // Immediately switch to the target view unless running a silent background refresh on startup
   if (overrideTask === "render" || task === "render" || ["generate", "revise", "repair"].includes(task)) {
-    layoutManager.focusView();
+    if (!silentTabKeep) {
+      layoutManager.focusView();
+    }
     results.setLoading(true, "正在编译代码并生成架构拓扑…");
   } else if (task === "extract") {
     results.tab("entities");
@@ -1297,7 +1336,23 @@ if (closeStatusBtn) {
 }
 el("format-code").onclick = () => {
   sourceEditor.format();
+  notice("已完成代码缩进格式化");
 };
+const viewFormatBtn = optEl("btn-view-format");
+if (viewFormatBtn) {
+  viewFormatBtn.onclick = () => {
+    sourceEditor.format();
+    notice("已完成代码缩进格式化");
+  };
+}
+const viewSaveBtn = optEl("btn-view-save");
+if (viewSaveBtn) {
+  viewSaveBtn.onclick = () => {
+    void save()
+      .then(() => notice("草稿已保存"))
+      .catch(fail);
+  };
+}
 el("render-run").onclick = () => {
   void submitRun("render");
 };
