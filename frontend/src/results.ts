@@ -423,11 +423,12 @@ export class Results {
     const resHash = optEl("result-hash");
     if (resHash) resHash.textContent = "";
   }
-  show(job: Run) {
+  show(job: Run, options: { silentCanvasSync?: boolean; currentDraftSource?: string } = {}) {
     const isJobActive = active(job.status);
-    if (this.current?.id !== job.id) this.reset(isJobActive);
+    const silent = Boolean(options.silentCanvasSync);
+    if (this.current?.id !== job.id && !silent) this.reset(isJobActive);
     this.current = job;
-    if (isJobActive) {
+    if (isJobActive && !silent) {
       const msg = phaseNames[job.phase] ? `正在${phaseNames[job.phase]}…` : "正在编译代码并生成架构拓扑…";
       this.setLoading(true, msg);
     }
@@ -606,21 +607,39 @@ export class Results {
         const image = optEl<HTMLImageElement>("diagram-image");
         if (image) image.hidden = true;
 
-        this.canvasEngine.setScope(job.session_id || "default");
-        void this.canvasEngine.render(result.diagram.view_ir, result.diagram.views);
+        // If user already made newer edits in editor/canvas while background run was finishing, skip overwriting live canvas!
+        const draftMatchesResult =
+          !silent ||
+          options.currentDraftSource === undefined ||
+          options.currentDraftSource === result.sysml_source;
 
-        const summary = result.diagram.view_ir.summary;
-        const diagSumm = optEl("diagram-summary");
-        if (diagSumm) {
-          diagSumm.textContent = `${summary.displayedNodes} 节点 · ${summary.displayedEdges} 连线`;
+        if (draftMatchesResult) {
+          this.canvasEngine.setScope(job.session_id || "default");
+          void this.canvasEngine.render(
+            result.diagram.view_ir,
+            result.diagram.views,
+            silent ? { preserveViewport: true, preserveDrillPath: true } : {},
+          );
+
+          const activeViewType = silent
+            ? this.canvasEngine.getCurrentViewType() || result.diagram.view_ir.viewType
+            : result.diagram.view_ir.viewType;
+          const summary =
+            result.diagram.views?.[activeViewType]?.summary || result.diagram.view_ir.summary;
+          const diagSumm = optEl("diagram-summary");
+          if (diagSumm) {
+            diagSumm.textContent = `${summary.displayedNodes} 节点 · ${summary.displayedEdges} 连线`;
+          }
+
+          if (!silent) {
+            const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
+            viewTypeBtns.forEach((b) => {
+              const isActive = b.dataset.view === result.diagram?.view_ir?.viewType;
+              b.classList.toggle("active", isActive);
+              b.setAttribute("aria-selected", String(isActive));
+            });
+          }
         }
-
-        const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
-        viewTypeBtns.forEach((b) => {
-          const isActive = b.dataset.view === result.diagram?.view_ir?.viewType;
-          b.classList.toggle("active", isActive);
-          b.setAttribute("aria-selected", String(isActive));
-        });
       } else if (result.diagram.svg) {
         const canvasContainer = optEl("sysml-canvas-container");
         if (canvasContainer) canvasContainer.hidden = true;

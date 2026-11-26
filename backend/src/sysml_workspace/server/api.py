@@ -61,11 +61,21 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
             from .local_executor import LocalExecutor
             app.state.executor = LocalExecutor(app.state.db)
 
+        warmup_task: asyncio.Task[None] | None = None
+        if hasattr(app.state, "executor") and hasattr(app.state.executor, "warmup"):
+            warmup_task = asyncio.create_task(app.state.executor.warmup())
+
         # Migrations are an explicit deployment step, never inferred on startup.
         app.state.components = ComponentClient()
         try:
             yield
         finally:
+            if warmup_task is not None and not warmup_task.done():
+                warmup_task.cancel()
+            if hasattr(app.state, "executor") and hasattr(app.state.executor, "validator"):
+                aclose = getattr(app.state.executor.validator, "aclose", None)
+                if callable(aclose):
+                    await aclose()
             await app.state.components.close()
             if database is None:
                 app.state.db.close()

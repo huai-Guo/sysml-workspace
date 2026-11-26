@@ -1,10 +1,13 @@
 package io.github.huaiguo.sysmlvalidator;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,7 +15,10 @@ import java.util.LinkedHashMap;
 import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.Set;
+import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.eclipse.emf.ecore.EObject;
 import org.eclipse.xtext.nodemodel.ICompositeNode;
 import org.eclipse.xtext.nodemodel.util.NodeModelUtils;
@@ -52,6 +58,10 @@ public final class ValidatorMain {
     private static final String VALIDATOR_NAME = "omg-sysml-v2-pilot";
     private static final String VALIDATOR_VERSION = "0.62.0";
     private static final String VALIDATOR_TAG = "2026-08";
+    private static final Gson COMPACT_GSON = new GsonBuilder()
+            .serializeNulls()
+            .disableHtmlEscaping()
+            .create();
 
     private ValidatorMain() {
     }
@@ -88,6 +98,11 @@ public final class ValidatorMain {
             interactive.loadLibrary(libraryPath);
         }
 
+        if (parsed.daemon) {
+            runDaemon(interactive, protocolOut);
+            return 0;
+        }
+
         String source = parsed.filePath == null
                 ? new String(System.in.readAllBytes(), StandardCharsets.UTF_8)
                 : Files.readString(Path.of(parsed.filePath), StandardCharsets.UTF_8);
@@ -96,27 +111,138 @@ public final class ValidatorMain {
             throw new IOException("SysML source is empty.");
         }
 
-        SysMLInteractiveResult result = interactive.process(source, false);
+        return evaluateOnce(interactive, source, protocolOut, false);
+    }
 
-        if (result.getException() != null) {
-            String message = result.getException().getMessage();
-            if (message == null || message.isBlank()) {
-                message = result.getException().getClass().getName();
+    private static void runDaemon(SysMLInteractive interactive, java.io.PrintStream protocolOut) throws IOException {
+        protocolOut.println("{\"status\":\"ready\"}");
+        protocolOut.flush();
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
             }
-            protocolOut.println(failureJson("internal", message));
-            return 2;
-        }
+            try {
+                JsonObject req = JsonParser.parseString(trimmed).getAsJsonObject();
+                if (req.has("shutdown") && req.get("shutdown").getAsBoolean()) {
+                    break;
+                }
+                String source;
+                if (req.has("source_base64") && !req.get("source_base64").isJsonNull()) {
+                    byte[] decoded = Base64.getDecoder().decode(req.get("source_base64").getAsString());
+                    source = new String(decoded, StandardCharsets.UTF_8);
+                } else if (req.has("file") && !req.get("file").isJsonNull()) {
+                    source = Files.readString(Path.of(req.get("file").getAsString()), StandardCharsets.UTF_8);
+                } else {
+                    protocolOut.println(compactFailureJson("internal", "Daemon request missing source_base64."));
+                    protocolOut.flush();
+                    continue;
+                }
 
-        List<Issue> issues = new ArrayList<>(result.getIssues());
-        boolean valid = !result.hasErrors();
-        String json = resultJson(valid, issues);
-        if (valid) {
-            String model = new GsonBuilder().serializeNulls().create()
-                    .toJson(exportModel(result.getRootElement()));
-            json = json.substring(0, json.lastIndexOf('}')) + ",\n  \"model\": " + model + "\n}";
+                if (source.isBlank()) {
+                    protocolOut.println(compactFailureJson("syntax", "SysML source is empty."));
+                    protocolOut.flush();
+                    continue;
+                }
+
+                evaluateOnce(interactive, source, protocolOut, true);
+                protocolOut.flush();
+            } catch (Exception ex) {
+                String msg = ex.getMessage();
+                if (msg == null || msg.isBlank()) {
+                    msg = ex.getClass().getName();
+                }
+                protocolOut.println(compactFailureJson("internal", msg));
+                protocolOut.flush();
+            }
         }
-        protocolOut.println(json);
-        return valid ? 0 : 1;
+    }
+
+    private static int evaluateOnce(
+            SysMLInteractive interactive,
+            String source,
+            java.io.PrintStream protocolOut,
+            boolean compactLine
+    ) throws IOException {
+        try {
+            SysMLInteractiveResult result = interactive.process(source, false);
+
+            if (result.getException() != null) {
+                String message = result.getException().getMessage();
+                if (message == null || message.isBlank()) {
+                    message = result.getException().getClass().getName();
+                }
+                protocolOut.println(compactLine ? compactFailureJson("internal", message) : failureJson("internal", message));
+                return 2;
+            }
+
+            List<Issue> issues = new ArrayList<>(result.getIssues());
+            boolean valid = !result.hasErrors();
+            if (compactLine) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                Map<String, Object> valMeta = new LinkedHashMap<>();
+                valMeta.put("name", VALIDATOR_NAME);
+                valMeta.put("version", VALIDATOR_VERSION);
+                valMeta.put("tag", VALIDATOR_TAG);
+                payload.put("validator", valMeta);
+                payload.put("valid", valid);
+
+                List<Map<String, Object>> diagList = new ArrayList<>(issues.size());
+                for (Issue issue : issues) {
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("severity", issue.getSeverity().name().toLowerCase(Locale.ROOT));
+                    d.put("kind", issue.isSyntaxError() ? "syntax" : "semantic");
+                    d.put("message", issue.getMessage() == null ? "" : issue.getMessage());
+                    d.put("line", issue.getLineNumber());
+                    d.put("column", issue.getColumn());
+                    d.put("offset", issue.getOffset());
+                    d.put("length", issue.getLength());
+                    d.put("code", issue.getCode());
+                    d.put("source", "omg-pilot");
+                    diagList.add(d);
+                }
+                payload.put("diagnostics", diagList);
+                if (valid) {
+                    payload.put("model", exportModel(result.getRootElement()));
+                }
+                protocolOut.println(COMPACT_GSON.toJson(payload));
+            } else {
+                String json = resultJson(valid, issues);
+                if (valid) {
+                    String model = COMPACT_GSON.toJson(exportModel(result.getRootElement()));
+                    json = json.substring(0, json.lastIndexOf('}')) + ",\n  \"model\": " + model + "\n}";
+                }
+                protocolOut.println(json);
+            }
+            return valid ? 0 : 1;
+        } finally {
+            interactive.removeResource();
+        }
+    }
+
+    private static String compactFailureJson(String kind, String message) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        Map<String, Object> valMeta = new LinkedHashMap<>();
+        valMeta.put("name", VALIDATOR_NAME);
+        valMeta.put("version", VALIDATOR_VERSION);
+        valMeta.put("tag", VALIDATOR_TAG);
+        payload.put("validator", valMeta);
+        payload.put("valid", false);
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("severity", "error");
+        d.put("kind", kind);
+        d.put("message", message == null ? "" : message);
+        d.put("line", null);
+        d.put("column", null);
+        d.put("offset", null);
+        d.put("length", null);
+        d.put("code", null);
+        d.put("source", "sysml-agent-validator");
+        payload.put("diagnostics", List.of(d));
+        return COMPACT_GSON.toJson(payload);
     }
 
     /** Export authored syntax-backed elements, never the entire standard library. */
@@ -458,15 +584,18 @@ public final class ValidatorMain {
     private static final class Arguments {
         private final String libraryPath;
         private final String filePath;
+        private final boolean daemon;
 
-        private Arguments(String libraryPath, String filePath) {
+        private Arguments(String libraryPath, String filePath, boolean daemon) {
             this.libraryPath = libraryPath;
             this.filePath = filePath;
+            this.daemon = daemon;
         }
 
         static Arguments parse(String[] args) throws IOException {
             String libraryPath = null;
             String filePath = null;
+            boolean daemon = false;
 
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
@@ -482,11 +611,12 @@ public final class ValidatorMain {
                         }
                         filePath = args[i];
                     }
+                    case "--daemon" -> daemon = true;
                     default -> throw new IOException("Unknown argument: " + args[i]);
                 }
             }
 
-            return new Arguments(libraryPath, filePath);
+            return new Arguments(libraryPath, filePath, daemon);
         }
     }
 }

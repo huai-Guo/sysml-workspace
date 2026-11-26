@@ -463,13 +463,122 @@ async function createSession(value?: WorkspaceValue) {
     updateControls();
   }
 }
-async function applyCanvasEditAndRender(source: string) {
+let canvasSyncTimer: ReturnType<typeof setTimeout> | undefined;
+let canvasSyncRunning = false;
+let canvasSyncQueued = false;
+let syncBadgeFadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function setCanvasSyncBadge(
+  state: "hidden" | "syncing" | "synced" | "invalid",
+  text = "",
+) {
+  const badgeEl = optEl("canvas-sync-badge");
+  if (!badgeEl) return;
+  clearTimeout(syncBadgeFadeTimer);
+  if (state === "hidden") {
+    badgeEl.hidden = true;
+    badgeEl.className = "canvas-sync-badge";
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.className = `canvas-sync-badge is-${state}`;
+  badgeEl.textContent = text;
+  if (state === "synced") {
+    syncBadgeFadeTimer = setTimeout(() => {
+      badgeEl.hidden = true;
+    }, 2200);
+  }
+}
+
+async function flushSilentCanvasSync() {
+  if (canvasSyncRunning) {
+    canvasSyncQueued = true;
+    return;
+  }
+  if (!buffer || !sessionId || switching) return;
+
+  canvasSyncRunning = true;
+  canvasSyncQueued = false;
+  setCanvasSyncBadge("syncing", "⟳ 后台校验中…");
+
+  const model = sessionId;
+  const epoch = authGate.current;
+  try {
+    await save();
+    if (!authGate.accepts(epoch) || sessionId !== model || !buffer) return;
+    const draft = structuredClone(buffer.value.draft);
+    draft.task = "render";
+    const payload = {
+      session_id: model,
+      ...draft,
+      request: "",
+      render: true,
+    };
+    const attempt = submission.forBody(JSON.stringify(payload));
+    const job = await api.json<Run>("/v1/runs", {
+      method: "POST",
+      body: attempt.body,
+      headers: { "Idempotency-Key": attempt.key },
+    });
+    if (!authGate.accepts(epoch) || sessionId !== model) return;
+    submission.accepted();
+    selectedRun = job.id;
+    updateUrl();
+
+    // Poll silently in background without showing full-screen skeleton or blocking interaction!
+    let finalRun = job;
+    for (let step = 0; step < 80; step++) {
+      if (!authGate.accepts(epoch) || sessionId !== model) return;
+      if (!active(finalRun.status)) {
+        finalRun = await api.json<Run>(`/v1/runs/${job.id}`);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, step < 8 ? 80 : 180));
+      finalRun = await api.json<Run>(`/v1/runs/${job.id}/status`);
+    }
+    if (active(finalRun.status)) {
+      finalRun = await api.json<Run>(`/v1/runs/${job.id}`);
+    }
+    if (!authGate.accepts(epoch) || sessionId !== model) return;
+
+    results.show(finalRun, {
+      silentCanvasSync: true,
+      currentDraftSource: sourceEditor.value,
+    });
+    results.stale(sourceEditor.value);
+    if (sourceEditor.value === finalRun.result?.sysml_source) {
+      sourceEditor.diagnostics(finalRun.result?.diagnostics || []);
+    }
+    void loadHistory().catch(() => {});
+
+    if (finalRun.result?.valid) {
+      setCanvasSyncBadge("synced", "✓ 已同步");
+    } else {
+      setCanvasSyncBadge("invalid", "⚠ 语法待检查");
+    }
+  } catch (err) {
+    console.warn("Background canvas sync warning:", err);
+    setCanvasSyncBadge("hidden");
+  } finally {
+    canvasSyncRunning = false;
+    if (canvasSyncQueued) {
+      canvasSyncQueued = false;
+      void flushSilentCanvasSync();
+    }
+  }
+}
+
+function applyCanvasEditAndRender(source: string) {
   if (!buffer) return;
   sourceEditor.value = source;
   el<HTMLSelectElement>("task").value = "render";
   edit({ ...buffer.value.draft, task: "render", sysml_source: source });
-  await save().catch(fail);
-  await submitRun("render");
+  // Keep canvas interactive immediately (0ms optimistic update already applied); debounce silent validation!
+  setCanvasSyncBadge("syncing", "⟳ 待同步…");
+  clearTimeout(canvasSyncTimer);
+  canvasSyncTimer = setTimeout(() => {
+    void flushSilentCanvasSync();
+  }, 380);
 }
 
 async function applySource(source: string, skipConfirm = false) {

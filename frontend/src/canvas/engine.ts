@@ -259,31 +259,49 @@ export class SysMLCanvasEngine {
       console.warn("Layers panel init warning:", e);
     }
 
-    // 3. Initialize Reverse Semantic Editor & Palette
+    // 3. Initialize Reverse Semantic Editor & Palette (with 0ms Optimistic Canvas Updates)
     if (options.getSource && options.applySource) {
       this.semanticEditor = new SemanticEditor({
         getSource: options.getSource,
         applySource: options.applySource,
         showNotice: options.showNotice,
         isExpandedCompound: (nodeId: string) => this.isCompoundNode(nodeId),
+        onOptimisticInsert: (req, position) => this.applyOptimisticInsert(req, position),
+        onOptimisticRename: (nodeId, oldName, newName) =>
+          this.applyOptimisticRename(nodeId, oldName, newName),
+        onOptimisticDelete: (cellIds) => this.applyOptimisticDelete(cellIds),
       });
       this.semanticEditor.attachGraph(this.graph);
     }
 
     try {
       this.palette = new SysMLPalette(container, this.graph, {
+        getSource: options.getSource,
         getDefaultParentId: () => {
           if (this.drillPath.length > 0) {
             const focused = this.drillPath[this.drillPath.length - 1];
-            return this.currentViewIR?.nodes.find((n) => n.id === focused)?.name;
+            const found = this.currentViewIR?.nodes.find((n) => n.id === focused);
+            return found?.qualifiedName || found?.name;
           }
-          const primaryContainer = this.currentViewIR?.nodes.find((n) =>
-            this.isCompoundNode(n.id),
+          const primaryContainer = this.currentViewIR?.nodes.find(
+            (n) => n.shapeCategory === "usage" && this.isCompoundNode(n.id),
           );
-          return primaryContainer?.name;
+          return primaryContainer?.qualifiedName || primaryContainer?.name || this.currentViewIR?.rootPackageName;
         },
         onInsert: (event: InsertElementEvent) => {
-          this.semanticEditor?.handleInsertElement(event.kind, event.name, event.targetParentId);
+          this.semanticEditor?.handleInsertElement(
+            {
+              kind: event.kind,
+              name: event.name,
+              parentQualifiedName: event.targetParentId,
+              typeName: event.typeName,
+              direction: event.direction,
+              conjugated: event.conjugated,
+            },
+            undefined,
+            undefined,
+            event.position,
+          );
         },
       });
     } catch (e) {
@@ -525,6 +543,18 @@ export class SysMLCanvasEngine {
           this.toggleNodeCollapse(node.id);
         }
         this.drillDown(node.id);
+      }
+    });
+
+    // Right-click on any node opens the hierarchical composer anchored directly to that parent node
+    this.graph.on("node:contextmenu", ({ node, e }) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const vn = (node.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+      if (vn && this.palette) {
+        this.graph.cleanSelection();
+        this.graph.select(node);
+        this.palette.openForParent(vn.qualifiedName || vn.name);
       }
     });
 
@@ -959,31 +989,50 @@ export class SysMLCanvasEngine {
     }
   }
 
+  public getCurrentViewType(): ViewType | undefined {
+    return this.currentViewIR?.viewType;
+  }
+
   public async render(
     viewIR: SysMLViewIR,
     allViews?: Record<string, SysMLViewIR>,
+    options: { preserveViewport?: boolean; preserveDrillPath?: boolean } = {},
   ): Promise<void> {
     const token = ++this.renderToken;
-    this.currentViewIR = viewIR;
     if (allViews) {
       this.allViews = allViews;
     }
 
-    this.layersPanel?.setViewType(viewIR.viewType);
-    this.drillPath = [];
+    // Preserve active view tab (e.g. interconnection / state / requirements) during silent background sync
+    let targetViewIR = viewIR;
+    if (options.preserveViewport && this.currentViewIR && allViews?.[this.currentViewIR.viewType]) {
+      targetViewIR = allViews[this.currentViewIR.viewType];
+    }
+    this.currentViewIR = targetViewIR;
+
+    this.layersPanel?.setViewType(targetViewIR.viewType);
+    if (!options.preserveDrillPath) {
+      this.drillPath = [];
+    } else {
+      const validIds = new Set(targetViewIR.nodes.map((n) => n.id));
+      this.drillPath = this.drillPath.filter((id) => validIds.has(id));
+    }
     this.collapsedEdgeEndpoints.clear();
     this.renderBreadcrumbs();
 
     // Guard first-render when the View tab is hidden (0x0 container): queue until visible!
     if (this.container.clientWidth < 50 || this.container.clientHeight < 50) {
-      this.pendingRender = { viewIR, allViews };
+      this.pendingRender = { viewIR: targetViewIR, allViews };
       return;
     }
     this.pendingRender = undefined;
     this.graph.resize(this.container.clientWidth, this.container.clientHeight);
 
+    const savedZoom = options.preserveViewport ? this.graph.zoom() : undefined;
+    const savedTranslate = options.preserveViewport ? this.graph.translate() : undefined;
+
     // 1. Run ELK layout
-    const elkResult = await runElkLayout(viewIR);
+    const elkResult = await runElkLayout(targetViewIR);
 
     if (token !== this.renderToken) {
       return;
@@ -1005,10 +1054,14 @@ export class SysMLCanvasEngine {
     const nodeDataMap = new Map<string, SysMLViewNode>();
 
     // 2. Instantiate and add nodes with depth and hierarchy awareness
-    for (const node of viewIR.nodes) {
+    const parentDeltaMap = new Map<string, { dx: number; dy: number }>();
+    const orderedNodes = [...targetViewIR.nodes].sort(
+      (a, b) => this.calculateNodeDepth(a) - this.calculateNodeDepth(b),
+    );
+    for (const node of orderedNodes) {
       nodeDataMap.set(node.id, node);
 
-      const sidecarPos = this.sidecar.get(node.id, viewIR.viewType);
+      const sidecarPos = this.sidecar.get(node.id, targetViewIR.viewType);
       const elkPos = elkResult.positions.get(node.id) || {
         x: 60,
         y: 60,
@@ -1016,8 +1069,15 @@ export class SysMLCanvasEngine {
         height: 60,
       };
 
-      const finalX = sidecarPos?.userMoved ? sidecarPos.x : elkPos.x;
-      const finalY = sidecarPos?.userMoved ? sidecarPos.y : elkPos.y;
+      const inheritedDelta =
+        node.parentId && parentDeltaMap.has(node.parentId)
+          ? parentDeltaMap.get(node.parentId)!
+          : { dx: 0, dy: 0 };
+
+      const finalX = sidecarPos?.userMoved ? sidecarPos.x : elkPos.x + inheritedDelta.dx;
+      const finalY = sidecarPos?.userMoved ? sidecarPos.y : elkPos.y + inheritedDelta.dy;
+      parentDeltaMap.set(node.id, { dx: finalX - elkPos.x, dy: finalY - elkPos.y });
+
       const finalWidth =
         sidecarPos?.userMoved && sidecarPos.width
           ? Math.max(sidecarPos.width, elkPos.width)
@@ -1054,7 +1114,7 @@ export class SysMLCanvasEngine {
         y: finalY,
         width: finalWidth,
         height: finalHeight,
-        zIndex: 1 + depth * 2, // Parent strictly beneath child components
+        zIndex: 1 + depth * 2,
         attrs: attrs as any,
         ports: {
           items: portItems,
@@ -1078,13 +1138,13 @@ export class SysMLCanvasEngine {
             height: finalHeight,
             userMoved: false,
           },
-          viewIR.viewType,
+          targetViewIR.viewType,
         );
       }
     }
 
     // 3. Establish container parent-child nesting in X6
-    for (const node of viewIR.nodes) {
+    for (const node of orderedNodes) {
       if (node.parentId && nodeCells.has(node.parentId)) {
         const parentCell = nodeCells.get(node.parentId)!;
         const childCell = nodeCells.get(node.id)!;
@@ -1092,14 +1152,12 @@ export class SysMLCanvasEngine {
       }
     }
 
-    // Auto-fit parent bounds to contain all children (without marking as manually userMoved)
-    for (const node of viewIR.nodes) {
-      if (this.isCompoundNode(node.id)) {
-        const saved = this.sidecar.get(node.id, viewIR.viewType);
-        if (!saved?.userMoved) {
-          this.updateParentBounds(node.id, false);
-        }
-      }
+    // Auto-fit parent bounds bottom-up (deepest containers first) so nested children are ALWAYS enclosed
+    const compoundNodesBottomUp = orderedNodes
+      .filter((n) => this.isCompoundNode(n.id))
+      .reverse();
+    for (const node of compoundNodesBottomUp) {
+      this.updateParentBounds(node.id, false);
     }
 
     const sideToDir = (
@@ -1113,7 +1171,7 @@ export class SysMLCanvasEngine {
     };
 
     // 4. Instantiate and add edges with port-direction-aware SysON orthogonal routing
-    for (const edge of viewIR.edges || []) {
+    for (const edge of targetViewIR.edges || []) {
       if (!nodeCells.has(edge.sourceId) || !nodeCells.has(edge.targetId)) {
         continue;
       }
@@ -1196,17 +1254,408 @@ export class SysMLCanvasEngine {
       });
     }
 
+    if (this.drillPath.length > 0) {
+      this.applyDrillFilter();
+    }
     this.layersPanel?.applyPreferences();
 
-    // 5. Fit view smoothly (both synchronous and next animation frame for reliable first-paint fit)
-    this.zoomFit();
-    if (typeof requestAnimationFrame !== "undefined") {
-      requestAnimationFrame(() => {
-        if (token === this.renderToken) {
-          this.zoomFit();
-        }
-      });
+    // 5. Restore camera smoothly on background sync, or fit view on initial/explicit render
+    if (
+      options.preserveViewport &&
+      savedZoom !== undefined &&
+      savedTranslate !== undefined &&
+      Number.isFinite(savedZoom)
+    ) {
+      this.graph.zoomTo(savedZoom);
+      this.graph.translate(savedTranslate.tx, savedTranslate.ty);
+    } else {
+      this.zoomFit();
+      if (typeof requestAnimationFrame !== "undefined") {
+        requestAnimationFrame(() => {
+          if (token === this.renderToken) {
+            this.zoomFit();
+          }
+        });
+      }
     }
+  }
+
+  // --- 0ms Optimistic Canvas Mutations (Zero Reload Freeze) ---
+
+  private findCanvasNodeByRef(ref?: string): SysMLViewNode | undefined {
+    if (!ref || ref === "__root__" || !this.currentViewIR) return undefined;
+    return (
+      this.currentViewIR.nodes.find((n) => n.qualifiedName === ref || n.id === ref) ||
+      this.currentViewIR.nodes.find((n) => n.name === ref) ||
+      (ref.includes("::")
+        ? this.currentViewIR.nodes.find((n) => n.name === ref.split("::").pop())
+        : undefined)
+    );
+  }
+
+  private updateToolbarNodeSummary(): void {
+    if (!this.currentViewIR) return;
+    const summaryEl = document.getElementById("diagram-summary");
+    if (summaryEl) {
+      summaryEl.textContent = `${this.currentViewIR.nodes.length} 节点 · ${this.currentViewIR.edges.length} 连线`;
+    }
+  }
+
+  public applyOptimisticInsert(
+    req: {
+      kind: string;
+      name: string;
+      parentQualifiedName?: string;
+      typeName?: string;
+      direction?: "in" | "out" | "inout" | "";
+      conjugated?: boolean;
+    },
+    dropPosition?: { x: number; y: number },
+  ): void {
+    if (!this.currentViewIR) return;
+    const kind = req.kind.toLowerCase();
+    const parentNode = this.findCanvasNodeByRef(req.parentQualifiedName);
+    const parentCell = parentNode ? (this.graph.getCellById(parentNode.id) as Node) : undefined;
+    const prefs = this.layersPanel?.prefs;
+
+    // 1. Port attached to an existing Part / Part Def / Port Def
+    if (kind === "port" && parentNode && parentCell) {
+      const effectiveDir: "in" | "out" | "inout" | null = req.direction
+        ? (req.direction as "in" | "out" | "inout")
+        : null;
+      const sideHint: "W" | "E" =
+        effectiveDir === "out" || (!effectiveDir && req.conjugated === false && parentNode.ports.length % 2 === 1)
+          ? "E"
+          : "W";
+
+      if (parentNode.shapeCategory === "definition" && this.currentViewIR.viewType === "general") {
+        let portComp = parentNode.compartments.find((c) => c.id === "ports");
+        if (!portComp) {
+          portComp = { id: "ports", title: "ports", items: [] };
+          parentNode.compartments.push(portComp);
+        }
+        const dirText = effectiveDir ? `${effectiveDir} ` : "";
+        const typeText = req.typeName ? ` : ${req.conjugated ? "~" : ""}${req.typeName}` : "";
+        portComp.items.push({
+          id: `${parentNode.id}::${req.name}`,
+          text: `${dirText}${req.name}${typeText}`,
+        });
+      } else {
+        parentNode.ports.push({
+          id: `${parentNode.id}::${req.name}`,
+          name: req.name,
+          typeName: req.typeName,
+          direction: effectiveDir,
+          conjugated: Boolean(req.conjugated),
+          sideHint,
+        });
+        const portItems = buildPortItems(parentNode, this.currentThemeStyles, {
+          lodTier: this.currentLODTier,
+          scale: this.currentScale,
+          forceShowPortTypes: prefs?.showPortTypes ?? false,
+        });
+        parentCell.removePorts();
+        parentCell.addPorts(portItems as any);
+      }
+
+      const curSize = parentCell.getSize();
+      const newH = Math.max(curSize.height, 58 + Math.max(parentNode.ports.length * 24, 24));
+      parentCell.setSize(curSize.width, newH);
+      const attrs = buildNodeAttrs(parentNode, this.currentThemeStyles, {
+        depth: this.calculateNodeDepth(parentNode),
+        isCompound: this.isCompoundNode(parentNode.id),
+        isCollapsed: this.collapsedNodes.has(parentNode.id),
+        lodTier: this.currentLODTier,
+        scale: this.currentScale,
+        nodeWidth: curSize.width,
+        forceHideCompartments: prefs ? !prefs.showCompartments : false,
+      });
+      parentCell.setAttrs(attrs as any);
+      if (parentNode.parentId) {
+        this.updateParentBounds(parentNode.parentId, false);
+      }
+      return;
+    }
+
+    // 2. Attribute or directed Item added into parent node's compartment
+    if ((kind === "attribute" || kind === "item") && parentNode && parentCell) {
+      const compId = kind === "attribute" ? "attributes" : "ports";
+      let comp = parentNode.compartments.find((c) => c.id === compId);
+      if (!comp) {
+        comp = { id: compId, title: compId, items: [] };
+        parentNode.compartments.push(comp);
+      }
+      const dirPrefix = req.direction ? `${req.direction} ` : "";
+      const typeSuffix = req.typeName ? ` : ${req.typeName}` : "";
+      comp.items.push({
+        id: `${parentNode.id}::${req.name}`,
+        text: `${dirPrefix}${req.name}${typeSuffix}`,
+      });
+      const curSize = parentCell.getSize();
+      const newH = curSize.height + 20;
+      parentCell.setSize(curSize.width, newH);
+      const attrs = buildNodeAttrs(parentNode, this.currentThemeStyles, {
+        depth: this.calculateNodeDepth(parentNode),
+        isCompound: this.isCompoundNode(parentNode.id),
+        isCollapsed: this.collapsedNodes.has(parentNode.id),
+        lodTier: this.currentLODTier,
+        scale: this.currentScale,
+        nodeWidth: curSize.width,
+        forceHideCompartments: prefs ? !prefs.showCompartments : false,
+      });
+      parentCell.setAttrs(attrs as any);
+      if (parentNode.parentId) {
+        this.updateParentBounds(parentNode.parentId, false);
+      }
+      return;
+    }
+
+    // 3. Structural / Behavioral / Requirement Node insertion (including nested child inside parent!)
+    const shapeCategoryMap: Record<string, SysMLViewNode["shapeCategory"]> = {
+      package: "package",
+      part_def: "definition",
+      port_def: "definition",
+      item_def: "definition",
+      part: "usage",
+      state: "state",
+      action: "action",
+      requirement: "requirement",
+    };
+    const stereotypeMap: Record<string, string> = {
+      package: "«package»",
+      part_def: "«part def»",
+      port_def: "«port def»",
+      item_def: "«item def»",
+      part: "«part»",
+      state: "«state»",
+      action: "«action»",
+      requirement: "«requirement»",
+    };
+    const layerMap: Record<string, SysMLViewNode["layer"]> = {
+      package: "L2_Structure",
+      part_def: "L1_Definitions",
+      port_def: "L1_Definitions",
+      item_def: "L1_Definitions",
+      part: "L2_Structure",
+      state: "L3_Behavior",
+      action: "L3_Behavior",
+      requirement: "L5_Requirements",
+    };
+
+    const basePrefix =
+      req.parentQualifiedName && req.parentQualifiedName !== "__root__"
+        ? req.parentQualifiedName
+        : this.currentViewIR.rootPackageName;
+    const qualifiedName = basePrefix ? `${basePrefix}::${req.name}` : req.name;
+
+    // Inherit boundary ports optimistically if typed by an existing Part Def in General/Interconnection view!
+    const inheritedPorts: SysMLViewNode["ports"] = [];
+    if (kind === "part" && req.typeName && this.allViews?.general) {
+      const defNode = this.allViews.general.nodes.find(
+        (n) => n.shapeCategory === "definition" && n.name === req.typeName,
+      );
+      const portComp = defNode?.compartments.find((c) => c.id === "ports");
+      if (portComp) {
+        portComp.items.forEach((item, idx) => {
+          const m = /^(?:(in|out|inout)\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*(~?)([A-Za-z_][A-Za-z0-9_]*))?/.exec(
+            item.text.trim(),
+          );
+          if (m) {
+            const dir = (m[1] as "in" | "out" | "inout" | undefined) || null;
+            const pName = m[2];
+            const conj = m[3] === "~";
+            const pType = m[4];
+            inheritedPorts.push({
+              id: `${qualifiedName}::${pName}`,
+              name: pName,
+              typeName: pType,
+              direction: dir,
+              conjugated: conj,
+              sideHint: dir === "out" || (!dir && idx % 2 === 1) ? "E" : "W",
+            });
+          }
+        });
+      }
+    }
+
+    const newNode: SysMLViewNode = {
+      id: qualifiedName,
+      semanticId: qualifiedName,
+      qualifiedName,
+      name: req.name,
+      kind,
+      shapeCategory: shapeCategoryMap[kind] || "usage",
+      stereotype: stereotypeMap[kind] || `«${kind}»`,
+      typeLabel: req.typeName || undefined,
+      parentId: parentNode ? parentNode.id : null,
+      layer: layerMap[kind] || "L2_Structure",
+      compartments:
+        kind === "requirement"
+          ? [{ id: "doc", title: "doc", items: [{ id: `${qualifiedName}::doc`, text: `${req.name} 需求规格说明` }] }]
+          : [],
+      ports: inheritedPorts,
+    };
+
+    this.currentViewIR.nodes.push(newNode);
+    this.currentViewIR.summary.displayedNodes = this.currentViewIR.nodes.length;
+
+    const nodeW = 200;
+    const nodeH = Math.max(64, 52 + inheritedPorts.length * 22 + (kind === "requirement" ? 36 : 0));
+    let x = dropPosition?.x ?? 80;
+    let y = dropPosition?.y ?? 80;
+
+    if (!dropPosition) {
+      if (parentNode && parentCell) {
+        const pPos = parentCell.getPosition();
+        const siblings = this.graph.getNodes().filter((n) => {
+          const vn = (n.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+          return vn?.parentId === parentNode.id;
+        });
+        if (siblings.length === 0) {
+          x = pPos.x + 54;
+          y = pPos.y + 68;
+        } else {
+          let maxBottom = pPos.y + 68;
+          let firstX = pPos.x + 54;
+          siblings.forEach((sib, idx) => {
+            const sp = sib.getPosition();
+            const ss = sib.getSize();
+            if (idx === 0) firstX = sp.x;
+            maxBottom = Math.max(maxBottom, sp.y + ss.height + 28);
+          });
+          x = firstX;
+          y = maxBottom;
+        }
+      } else {
+        const topNodes = this.graph.getNodes().filter((n) => {
+          const vn = (n.getData() as { viewNode?: SysMLViewNode } | undefined)?.viewNode;
+          return !vn?.parentId && (kind.endsWith("def") ? vn?.shapeCategory === "definition" : vn?.shapeCategory !== "definition");
+        });
+        if (topNodes.length > 0) {
+          let maxRight = 60;
+          let baseY = kind.endsWith("def") ? 48 : 240;
+          topNodes.forEach((tn, idx) => {
+            const tp = tn.getPosition();
+            const ts = tn.getSize();
+            if (idx === 0) baseY = tp.y;
+            maxRight = Math.max(maxRight, tp.x + ts.width + 44);
+          });
+          x = maxRight;
+          y = baseY;
+        }
+      }
+    }
+
+    const depth = this.calculateNodeDepth(newNode);
+    const attrs = buildNodeAttrs(newNode, this.currentThemeStyles, {
+      depth,
+      isCompound: false,
+      isCollapsed: false,
+      lodTier: this.currentLODTier,
+      scale: this.currentScale,
+      nodeWidth: nodeW,
+      forceHideCompartments: prefs ? !prefs.showCompartments : false,
+    });
+    const portItems = buildPortItems(newNode, this.currentThemeStyles, {
+      lodTier: this.currentLODTier,
+      scale: this.currentScale,
+      forceShowPortTypes: prefs?.showPortTypes ?? false,
+    });
+
+    const newCell = this.graph.addNode({
+      id: newNode.id,
+      shape: SYSML_NODE_NAME,
+      x,
+      y,
+      width: nodeW,
+      height: nodeH,
+      zIndex: 1 + depth * 2,
+      attrs: attrs as any,
+      ports: { items: portItems },
+      data: {
+        viewNode: newNode,
+        layer: newNode.layer,
+      },
+    });
+
+    if (parentNode && parentCell) {
+      if (this.collapsedNodes.has(parentNode.id)) {
+        this.toggleNodeCollapse(parentNode.id);
+      }
+      parentCell.addChild(newCell);
+      const pAttrs = buildNodeAttrs(parentNode, this.currentThemeStyles, {
+        depth: this.calculateNodeDepth(parentNode),
+        isCompound: true,
+        isCollapsed: false,
+        lodTier: this.currentLODTier,
+        scale: this.currentScale,
+        nodeWidth: parentCell.getSize().width,
+        forceHideCompartments: prefs ? !prefs.showCompartments : false,
+      });
+      parentCell.setAttrs(pAttrs as any);
+      this.updateParentBounds(parentNode.id, false);
+    }
+
+    this.graph.cleanSelection();
+    this.graph.select(newCell);
+    this.updateToolbarNodeSummary();
+  }
+
+  public applyOptimisticRename(nodeId: string, _oldName: string, newName: string): void {
+    const cell = this.graph.getCellById(nodeId) as Node;
+    if (!cell || !cell.isNode()) return;
+    const data = cell.getData() as { viewNode?: SysMLViewNode } | undefined;
+    const vn = data?.viewNode;
+    if (!vn) return;
+    vn.name = newName;
+    const parts = vn.qualifiedName.split("::");
+    parts[parts.length - 1] = newName;
+    vn.qualifiedName = parts.join("::");
+
+    const attrs = buildNodeAttrs(vn, this.currentThemeStyles, {
+      depth: this.calculateNodeDepth(vn),
+      isCompound: this.isCompoundNode(vn.id),
+      isCollapsed: this.collapsedNodes.has(vn.id),
+      lodTier: this.currentLODTier,
+      scale: this.currentScale,
+      nodeWidth: cell.getSize().width,
+      forceHideCompartments: this.layersPanel?.prefs ? !this.layersPanel.prefs.showCompartments : false,
+    });
+    cell.setAttrs(attrs as any);
+  }
+
+  public applyOptimisticDelete(cellIds: string[]): void {
+    if (!this.currentViewIR) return;
+    const toRemove = new Set<string>(cellIds);
+    for (const id of cellIds) {
+      for (const desc of this.getDescendantNodeIds(id)) {
+        toRemove.add(desc);
+      }
+    }
+
+    const affectedParents = new Set<string>();
+    for (const n of this.currentViewIR.nodes) {
+      if (toRemove.has(n.id) && n.parentId && !toRemove.has(n.parentId)) {
+        affectedParents.add(n.parentId);
+      }
+    }
+
+    for (const id of toRemove) {
+      const cell = this.graph.getCellById(id);
+      if (cell) cell.remove();
+    }
+
+    this.currentViewIR.nodes = this.currentViewIR.nodes.filter((n) => !toRemove.has(n.id));
+    this.currentViewIR.edges = this.currentViewIR.edges.filter(
+      (e) => !toRemove.has(e.id) && !toRemove.has(e.sourceId) && !toRemove.has(e.targetId),
+    );
+    this.currentViewIR.summary.displayedNodes = this.currentViewIR.nodes.length;
+    this.currentViewIR.summary.displayedEdges = this.currentViewIR.edges.length;
+
+    for (const pid of affectedParents) {
+      this.updateParentBounds(pid, false);
+    }
+    this.updateToolbarNodeSummary();
   }
 
   private buildEdgeAttrs(edge: SysMLViewEdge, theme: ThemeStyles): Record<string, any> {
