@@ -38,10 +38,10 @@ export const TAB_DEFS: Record<TabId, TabDef> = {
   },
   diagnostics: {
     id: "diagnostics",
-    label: "控制台",
-    iconHtml: `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2h-13zm0 1h13a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5zm2.146 2.646a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L5.293 8 3.646 6.354a.5.5 0 0 1 0-.708zM7.5 9.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5z"/></svg>`,
+    label: "语法检查与大纲",
+    iconHtml: `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M10.97 4.97a.235.235 0 0 0-.02.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-1.071-1.05z"/></svg>`,
     badgeId: "diagnostic-count",
-    tooltip: "代码编译、语义验证与运行控制台 (拖拽至其他窗口即可合并标签页)",
+    tooltip: "查看 SysML v2 语法语义诊断错误与模型元素结构大纲",
   },
   copilot: {
     id: "copilot",
@@ -691,6 +691,21 @@ export class LayoutManager {
     const resetBtn = document.getElementById("btn-layout-reset");
     if (resetBtn) {
       resetBtn.onclick = () => this.resetLayout();
+    }
+
+    // One-click Code + View split comparison button
+    const splitCompareBtn = document.getElementById("btn-split-side-by-side");
+    if (splitCompareBtn) {
+      splitCompareBtn.onclick = () => {
+        if (this.state.panes["view-region"].tabs.includes("view")) {
+          this.resetLayout();
+        } else {
+          this.executeSplitBottom("view", "editor-region");
+          this.state.panes["editor-region"].activeTab = "editor";
+          this.saveState();
+          this.apply();
+        }
+      };
     }
 
     // Sidebar toggle

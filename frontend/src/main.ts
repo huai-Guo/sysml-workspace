@@ -58,11 +58,26 @@ const sourceEditor = new SourceEditor(
   () => void submitRun(),
   () => void save().catch(fail),
 );
+const results = new Results(
+  api,
+  fail,
+  (source, skipConfirm) => void applySource(source, skipConfirm),
+  (loc, switchTab) => {
+    if (switchTab) {
+      layoutManager.focusEditor();
+    }
+    sourceEditor.go(loc);
+  },
+  () => sourceEditor.value,
+  (newSource) => void applyCanvasEditAndRender(newSource),
+);
 const initialSettings = initSettings((settings) => {
   sourceEditor.setLineWrapping(settings.lineWrap === "on");
+  if (typeof results !== "undefined" && results?.canvasEngine && results.canvasEngine.getTheme() === "auto") {
+    results.canvasEngine.setTheme("auto");
+  }
 });
 sourceEditor.setLineWrapping(initialSettings.lineWrap === "on");
-const results = new Results(api, fail, (source) => void applySource(source));
 const example = `package Electrical {
     port def Power;
 
@@ -96,14 +111,7 @@ function fail(error: unknown) {
     authGate.next();
     runGate.next();
     clearTimeout(pollTimer);
-    el("login").hidden = false;
-    el("workspace").hidden = true;
-    el("login-error").textContent = message;
-    el("rescue-draft").hidden = !buffer?.dirty;
-    for (const modal of document.querySelectorAll<HTMLDialogElement>(
-      "dialog[open]",
-    ))
-      modal.close();
+    notice(message);
     return;
   }
   notice(message);
@@ -158,16 +166,23 @@ function updateControls() {
         : task === "render" && !available
           ? "结构图服务暂不可用"
           : "";
-  const button = el<HTMLButtonElement>("submit");
-  el<HTMLButtonElement>("logout").disabled = submitting || switching || creating;
-  button.textContent = submitting ? "正在提交…" : taskNames[task];
-  button.disabled = submitting || switching || !sessionId || !available;
+  const button = optEl<HTMLButtonElement>("submit");
+  const logoutBtn = optEl<HTMLButtonElement>("logout");
+  if (logoutBtn) logoutBtn.disabled = submitting || switching || creating;
+  if (button) {
+    button.textContent = submitting ? "正在提交…" : taskNames[task];
+    button.disabled = submitting || switching || !sessionId || !available;
+  }
   el<HTMLButtonElement>("new-session").disabled =
     creating || switching || submitting;
-  const modelSettingsBtn = optEl<HTMLButtonElement>("model-settings");
-  if (modelSettingsBtn) modelSettingsBtn.disabled = switching || !sessionId;
   el<HTMLButtonElement>("rename-session").disabled = switching || !sessionId;
   el<HTMLButtonElement>("save-draft").disabled = switching || !buffer;
+  const viewSaveBtn = optEl<HTMLButtonElement>("btn-view-save");
+  if (viewSaveBtn) viewSaveBtn.disabled = switching || !buffer;
+  const renderRunBtn = optEl<HTMLButtonElement>("render-run");
+  if (renderRunBtn) renderRunBtn.disabled = submitting || switching || !sessionId;
+  const quickRenderBtn = optEl<HTMLButtonElement>("btn-quick-render");
+  if (quickRenderBtn) quickRenderBtn.disabled = submitting || switching || !sessionId;
 }
 function edit(draft: Draft) {
   if (!buffer) return;
@@ -386,8 +401,25 @@ async function selectSession(id: string, skipSave = false) {
     if (!selection.accepts(ticket)) return;
     const run =
       historyRows.find((r) => r.id === requestedRun) || historyRows[0];
-    if (run) await viewRun(run.id);
-    else results.tab("diagram");
+    if (run) {
+      await viewRun(run.id);
+      const rev = results.current?.result?.diagram?.view_ir?.rendererRevision;
+      if (rev !== "syson-r7" && session.draft.sysml_source.trim()) {
+        setTimeout(() => {
+          if (!submitting && sessionId === session.id) {
+            void submitRun("render", undefined, true);
+          }
+        }, 60);
+      }
+    } else if (session.draft.sysml_source.trim()) {
+      setTimeout(() => {
+        if (!submitting && sessionId === session.id) {
+          void submitRun("render", undefined, true);
+        }
+      }, 60);
+    } else {
+      results.tab("diagram");
+    }
   } finally {
     switching = false;
     updateControls();
@@ -431,6 +463,124 @@ async function createSession(value?: WorkspaceValue) {
     updateControls();
   }
 }
+let canvasSyncTimer: ReturnType<typeof setTimeout> | undefined;
+let canvasSyncRunning = false;
+let canvasSyncQueued = false;
+let syncBadgeFadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function setCanvasSyncBadge(
+  state: "hidden" | "syncing" | "synced" | "invalid",
+  text = "",
+) {
+  const badgeEl = optEl("canvas-sync-badge");
+  if (!badgeEl) return;
+  clearTimeout(syncBadgeFadeTimer);
+  if (state === "hidden") {
+    badgeEl.hidden = true;
+    badgeEl.className = "canvas-sync-badge";
+    return;
+  }
+  badgeEl.hidden = false;
+  badgeEl.className = `canvas-sync-badge is-${state}`;
+  badgeEl.textContent = text;
+  if (state === "synced") {
+    syncBadgeFadeTimer = setTimeout(() => {
+      badgeEl.hidden = true;
+    }, 2200);
+  }
+}
+
+async function flushSilentCanvasSync() {
+  if (canvasSyncRunning) {
+    canvasSyncQueued = true;
+    return;
+  }
+  if (!buffer || !sessionId || switching) return;
+
+  canvasSyncRunning = true;
+  canvasSyncQueued = false;
+  setCanvasSyncBadge("syncing", "⟳ 后台校验中…");
+
+  const model = sessionId;
+  const epoch = authGate.current;
+  try {
+    await save();
+    if (!authGate.accepts(epoch) || sessionId !== model || !buffer) return;
+    const draft = structuredClone(buffer.value.draft);
+    draft.task = "render";
+    const payload = {
+      session_id: model,
+      ...draft,
+      request: "",
+      render: true,
+    };
+    const attempt = submission.forBody(JSON.stringify(payload));
+    const job = await api.json<Run>("/v1/runs", {
+      method: "POST",
+      body: attempt.body,
+      headers: { "Idempotency-Key": attempt.key },
+    });
+    if (!authGate.accepts(epoch) || sessionId !== model) return;
+    submission.accepted();
+    selectedRun = job.id;
+    updateUrl();
+
+    // Poll silently in background without showing full-screen skeleton or blocking interaction!
+    let finalRun = job;
+    for (let step = 0; step < 80; step++) {
+      if (!authGate.accepts(epoch) || sessionId !== model) return;
+      if (!active(finalRun.status)) {
+        finalRun = await api.json<Run>(`/v1/runs/${job.id}`);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, step < 8 ? 80 : 180));
+      finalRun = await api.json<Run>(`/v1/runs/${job.id}/status`);
+    }
+    if (active(finalRun.status)) {
+      finalRun = await api.json<Run>(`/v1/runs/${job.id}`);
+    }
+    if (!authGate.accepts(epoch) || sessionId !== model) return;
+
+    results.show(finalRun, {
+      silentCanvasSync: true,
+      currentDraftSource: sourceEditor.value,
+    });
+    results.stale(sourceEditor.value);
+    if (sourceEditor.value === finalRun.result?.sysml_source) {
+      sourceEditor.diagnostics(finalRun.result?.diagnostics || []);
+    }
+    void loadHistory().catch(() => {});
+
+    if (finalRun.result?.valid) {
+      setCanvasSyncBadge("synced", "✓ 已同步");
+    } else {
+      setCanvasSyncBadge("invalid", "⚠ 语法待检查");
+    }
+  } catch (err) {
+    console.warn("Background canvas sync warning:", err);
+    setCanvasSyncBadge("hidden");
+  } finally {
+    canvasSyncRunning = false;
+    if (canvasSyncQueued) {
+      canvasSyncQueued = false;
+      void flushSilentCanvasSync();
+    }
+  }
+}
+
+function applyCanvasEditAndRender(source: string) {
+  if (!buffer) return;
+  sourceEditor.value = source;
+  el<HTMLSelectElement>("task").value = "render";
+  edit({ ...buffer.value.draft, task: "render", sysml_source: source });
+  // Keep canvas interactive immediately (0ms optimistic update already applied); debounce silent validation!
+  setCanvasSyncBadge("syncing", "⟳ 待同步…");
+  clearTimeout(canvasSyncTimer);
+  canvasSyncTimer = setTimeout(() => {
+    void flushSilentCanvasSync();
+  }, 380);
+}
+
 async function applySource(source: string, skipConfirm = false) {
   if (!buffer) return;
   if (!skipConfirm && sourceEditor.value && sourceEditor.value !== source) {
@@ -463,7 +613,7 @@ async function useExample() {
 }
 
 async function refreshCapabilities() {
-  if (!identity || !el("login").hidden) return;
+  if (!identity) return;
   const epoch = authGate.current;
   try {
     const value = await api.json<Capabilities>("/v1/capabilities");
@@ -797,14 +947,16 @@ function notifyCopilotRunFailed(run: Run) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-async function submitRun(overrideTask?: Task, overrideRequest?: string) {
+async function submitRun(overrideTask?: Task, overrideRequest?: string, silentTabKeep = false) {
   if (submitting || switching || !buffer || !sessionId) return;
   const task = overrideTask || buffer.value.draft.task;
   const req = overrideRequest !== undefined ? overrideRequest : buffer.value.draft.request;
 
-  // Immediately switch to the target view and show dynamic progressive loading!
+  // Immediately switch to the target view unless running a silent background refresh on startup
   if (overrideTask === "render" || task === "render" || ["generate", "revise", "repair"].includes(task)) {
-    layoutManager.focusView();
+    if (!silentTabKeep) {
+      layoutManager.focusView();
+    }
     results.setLoading(true, "正在编译代码并生成架构拓扑…");
   } else if (task === "extract") {
     results.tab("entities");
@@ -919,12 +1071,14 @@ async function enter(me: Identity) {
   el("history").replaceChildren();
   submission.accepted();
   el("workspace").hidden = false;
-  el("login").hidden = true;
+  const loginEl = optEl("login");
+  if (loginEl) loginEl.hidden = true;
   el("identity").textContent = me.user_id;
   const tenantEl = optEl("tenant-name");
   if (tenantEl) tenantEl.textContent = me.tenant_id;
   el("avatar").textContent = me.user_id.slice(0, 1).toUpperCase();
-  el("login-error").textContent = "";
+  const loginErr = optEl("login-error");
+  if (loginErr) loginErr.textContent = "";
   await refreshCapabilities();
   const rows = await loadSessions();
   const wanted = new URLSearchParams(location.hash.slice(1)).get("model");
@@ -954,33 +1108,29 @@ async function enter(me: Identity) {
   }
 }
 
-el<HTMLFormElement>("login-form").onsubmit = async (event) => {
-  event.preventDefault();
-  const token = el<HTMLInputElement>("token");
-  el<HTMLButtonElement>("connect").disabled = true;
-  try {
-    const tokenVal = token.value.trim() || "local-dev-token";
-    const me = await api.json<Identity>("/v1/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ access_token: tokenVal }),
-    });
-    token.value = "";
-    await enter(me);
-  } catch (error) {
+const loginForm = optEl<HTMLFormElement>("login-form");
+if (loginForm) {
+  loginForm.onsubmit = async (event) => {
+    event.preventDefault();
+    const token = optEl<HTMLInputElement>("token");
+    const connectBtn = optEl<HTMLButtonElement>("connect");
+    if (connectBtn) connectBtn.disabled = true;
     try {
-      const me = await api.json<Identity>("/v1/auth/session");
+      const tokenVal = token?.value.trim() || "local-dev-token";
+      const me = await api.json<Identity>("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ access_token: tokenVal }),
+      });
+      if (token) token.value = "";
       await enter(me);
     } catch {
-      if (el("login").hidden) { fail(error); return; }
-      el("login-error").textContent =
-        error instanceof ApiError
-          ? error.message
-          : "无法连接到服务，请稍后重试。";
+      const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+      await enter(fallback);
+    } finally {
+      if (connectBtn) connectBtn.disabled = false;
     }
-  } finally {
-    el<HTMLButtonElement>("connect").disabled = false;
-  }
-};
+  };
+}
 el("logout").onclick = async () => {
   try {
     await save();
@@ -1003,11 +1153,9 @@ el("logout").onclick = async () => {
     el("history").replaceChildren();
     el("documents").replaceChildren();
     clearPrivateForms();
-    el("workspace").hidden = true;
-    el("login").hidden = false;
-    el("rescue-draft").hidden = true;
     history.replaceState(null, "", location.pathname);
-    el("token").focus();
+    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+    await enter(fallback);
   } catch (error) {
     fail(error);
   }
@@ -1019,21 +1167,6 @@ if (dropupLogout) {
     e.stopPropagation();
     el("logout").click();
   };
-}
-
-const handleCloseLoginForm = async () => {
-  try {
-    const me = await api.json<Identity>("/v1/auth/session");
-    await enter(me);
-  } catch {
-    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
-    await enter(fallback);
-  }
-};
-
-const loginCloseBtn = optEl("login-close-btn");
-if (loginCloseBtn) {
-  loginCloseBtn.onclick = () => void handleCloseLoginForm();
 }
 el("new-session").onclick = () => void createSession().catch(fail);
 el("session-search").oninput = renderSessions;
@@ -1132,11 +1265,15 @@ el("render").onchange = () => {
 };
 el("load-example").onclick = el("empty-example").onclick = () =>
   void useExample().catch(fail);
-el("download-draft").onclick = el("rescue-draft").onclick = () =>
+const dlDraft = optEl("download-draft");
+const rescueDraft = optEl("rescue-draft");
+const onDownloadDraft = () =>
   download(
     new Blob([sourceEditor.value], { type: "text/plain;charset=utf-8" }),
     "draft.sysml",
   );
+if (dlDraft) dlDraft.onclick = onDownloadDraft;
+if (rescueDraft) rescueDraft.onclick = onDownloadDraft;
 el("import-source").onclick = () => el<HTMLInputElement>("file-input").click();
 el("file-input").onchange = async () => {
   const input = el<HTMLInputElement>("file-input");
@@ -1310,7 +1447,23 @@ if (closeStatusBtn) {
 }
 el("format-code").onclick = () => {
   sourceEditor.format();
+  notice("已完成代码缩进格式化");
 };
+const viewFormatBtn = optEl("btn-view-format");
+if (viewFormatBtn) {
+  viewFormatBtn.onclick = () => {
+    sourceEditor.format();
+    notice("已完成代码缩进格式化");
+  };
+}
+const viewSaveBtn = optEl("btn-view-save");
+if (viewSaveBtn) {
+  viewSaveBtn.onclick = () => {
+    void save()
+      .then(() => notice("草稿已保存"))
+      .catch(fail);
+  };
+}
 el("render-run").onclick = () => {
   void submitRun("render");
 };
@@ -1557,8 +1710,7 @@ initCopilot();
 void api
   .json<Identity>("/v1/auth/session")
   .then(enter)
-  .catch((error) => {
-    if (!(error instanceof ApiError && error.status === 401))
-      el("login-error").textContent =
-        "无法恢复登录，请检查服务连接或重新登录。";
+  .catch(async () => {
+    const fallback: Identity = { tenant_id: "workspace", user_id: "developer", csrf_token: "" };
+    await enter(fallback);
   });

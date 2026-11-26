@@ -1,3 +1,5 @@
+import type { SysMLViewIR } from "./canvas/types";
+
 export type Task =
   | "generate"
   | "revise"
@@ -46,7 +48,9 @@ export interface Result {
   final_artifact_sha256?: string;
   semantic_model?: { entities: Entity[]; relations: unknown[] };
   diagram?: {
-    svg: string;
+    svg?: string;
+    view_ir?: SysMLViewIR;
+    views?: Record<string, SysMLViewIR>;
     coverage?: {
       displayed_entities: number;
       displayed_relations: number;
