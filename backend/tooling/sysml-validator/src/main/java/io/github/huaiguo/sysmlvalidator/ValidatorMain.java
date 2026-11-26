@@ -41,9 +41,9 @@ import org.omg.sysml.lang.sysml.TransitionUsage;
 import org.omg.sysml.lang.sysml.Type;
 import org.omg.sysml.lang.sysml.VerificationCaseUsage;
 
+import org.eclipse.xtext.diagnostics.Severity;
 import org.eclipse.xtext.validation.Issue;
 import org.omg.sysml.interactive.SysMLInteractive;
-import org.omg.sysml.interactive.SysMLInteractiveResult;
 
 /**
  * Headless JSON adapter around the pinned OMG SysML v2 Pilot Implementation.
@@ -168,19 +168,12 @@ public final class ValidatorMain {
             boolean compactLine
     ) throws IOException {
         try {
-            SysMLInteractiveResult result = interactive.process(source, false);
+            interactive.next(".sysml");
+            interactive.parse(source);
+            List<Issue> issues = new ArrayList<>(interactive.validate());
+            Element root = interactive.getRootElement();
+            boolean valid = issues.stream().noneMatch(issue -> issue.getSeverity() == Severity.ERROR);
 
-            if (result.getException() != null) {
-                String message = result.getException().getMessage();
-                if (message == null || message.isBlank()) {
-                    message = result.getException().getClass().getName();
-                }
-                protocolOut.println(compactLine ? compactFailureJson("internal", message) : failureJson("internal", message));
-                return 2;
-            }
-
-            List<Issue> issues = new ArrayList<>(result.getIssues());
-            boolean valid = !result.hasErrors();
             if (compactLine) {
                 Map<String, Object> payload = new LinkedHashMap<>();
                 Map<String, Object> valMeta = new LinkedHashMap<>();
@@ -206,18 +199,36 @@ public final class ValidatorMain {
                 }
                 payload.put("diagnostics", diagList);
                 if (valid) {
-                    payload.put("model", exportModel(result.getRootElement()));
+                    payload.put("model", exportModel(root));
+                } else if (root != null) {
+                    Map<String, Object> partial = exportModelSafe(root);
+                    if (partial != null) {
+                        payload.put("partial_model", partial);
+                    }
                 }
                 protocolOut.println(COMPACT_GSON.toJson(payload));
             } else {
                 String json = resultJson(valid, issues);
                 if (valid) {
-                    String model = COMPACT_GSON.toJson(exportModel(result.getRootElement()));
+                    String model = COMPACT_GSON.toJson(exportModel(root));
                     json = json.substring(0, json.lastIndexOf('}')) + ",\n  \"model\": " + model + "\n}";
+                } else if (root != null) {
+                    Map<String, Object> partial = exportModelSafe(root);
+                    if (partial != null) {
+                        String partialJson = COMPACT_GSON.toJson(partial);
+                        json = json.substring(0, json.lastIndexOf('}')) + ",\n  \"partial_model\": " + partialJson + "\n}";
+                    }
                 }
                 protocolOut.println(json);
             }
             return valid ? 0 : 1;
+        } catch (Exception exception) {
+            String message = exception.getMessage();
+            if (message == null || message.isBlank()) {
+                message = exception.getClass().getName();
+            }
+            protocolOut.println(compactLine ? compactFailureJson("internal", message) : failureJson("internal", message));
+            return 2;
         } finally {
             interactive.removeResource();
         }
@@ -245,6 +256,16 @@ public final class ValidatorMain {
         return COMPACT_GSON.toJson(payload);
     }
 
+    /** Defensive wrapper for exporting partial AST on invalid models without breaking error reporting. */
+    private static Map<String, Object> exportModelSafe(Element root) {
+        if (root == null) return null;
+        try {
+            return exportModel(root);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     /** Export authored syntax-backed elements, never the entire standard library. */
     private static Map<String, Object> exportModel(Element root) throws IOException {
         List<Element> elements = new ArrayList<>();
@@ -263,6 +284,7 @@ public final class ValidatorMain {
         List<Map<String, Object>> relations = new ArrayList<>();
         for (Element element : elements) {
             var node = NodeModelUtils.getNode(element);
+            if (node == null) continue;
             Map<String, Object> entity = new LinkedHashMap<>();
             entity.put("id", ids.get(element));
             entity.put("kind", element.eClass().getName());

@@ -391,6 +391,15 @@ def parse_validation_payload(
             or not isinstance(model.get("relations"), list)):
         raise SysMLValidatorError("Invalid semantic model payload.")
 
+    partial_model = payload.get("partial_model")
+    if partial_model is not None and (
+        not isinstance(partial_model, dict)
+        or partial_model.get("schema_version") != "1"
+        or not isinstance(partial_model.get("entities"), list)
+        or not isinstance(partial_model.get("relations"), list)
+    ):
+        partial_model = None
+
     return SysMLValidationResult(
         valid=valid,
         diagnostics=diagnostics,
@@ -408,6 +417,7 @@ def parse_validation_payload(
         source_sha256=source_sha256,
         duration_ms=duration_ms,
         semantic_model=model,
+        partial_model=partial_model,
     )
 
 

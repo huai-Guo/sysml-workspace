@@ -32,3 +32,4 @@ class SysMLValidationResult:
     source_sha256: str | None = None
     duration_ms: float | None = None
     semantic_model: dict | None = None
+    partial_model: dict | None = None
