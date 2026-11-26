@@ -61,11 +61,21 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
             from .local_executor import LocalExecutor
             app.state.executor = LocalExecutor(app.state.db)
 
+        warmup_task: asyncio.Task[None] | None = None
+        if hasattr(app.state, "executor") and hasattr(app.state.executor, "warmup"):
+            warmup_task = asyncio.create_task(app.state.executor.warmup())
+
         # Migrations are an explicit deployment step, never inferred on startup.
         app.state.components = ComponentClient()
         try:
             yield
         finally:
+            if warmup_task is not None and not warmup_task.done():
+                warmup_task.cancel()
+            if hasattr(app.state, "executor") and hasattr(app.state.executor, "validator"):
+                aclose = getattr(app.state.executor.validator, "aclose", None)
+                if callable(aclose):
+                    await aclose()
             await app.state.components.close()
             if database is None:
                 app.state.db.close()
@@ -186,7 +196,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
                 "X-Frame-Options": "DENY",
-                "Content-Security-Policy": f"default-src 'self'; script-src 'self'; style-src 'self' 'nonce-{nonce}'; img-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+                "Content-Security-Policy": f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
             }
         )
         route = getattr(request.scope.get("route"), "path", "unmatched")

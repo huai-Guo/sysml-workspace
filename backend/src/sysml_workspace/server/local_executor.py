@@ -33,6 +33,12 @@ class LocalExecutor:
         self.db = db
         self.validator = PilotSubprocessValidator(tooling_dir=_get_tooling_dir())
 
+    async def warmup(self) -> None:
+        try:
+            await self.validator.warmup()
+        except Exception as exc:
+            log.debug(f"Validator warmup skipped: {exc}")
+
     def start_job(self, job_id: str, payload: dict):
         try:
             loop = asyncio.get_running_loop()

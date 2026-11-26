@@ -3,6 +3,8 @@ import { ApiClient, messages } from "./api";
 import { SourceEditor } from "./editor";
 import { active } from "./state";
 import type { Run, Entity } from "./types";
+import { SysMLCanvasEngine } from "./canvas/engine";
+import type { CanvasThemeId, ViewType } from "./canvas/types";
 
 export const taskNames = {
   generate: "生成代码",
@@ -47,6 +49,7 @@ export function badge(status: string) {
 
 export class Results {
   current?: Run;
+  public canvasEngine?: SysMLCanvasEngine;
   private resultEditor = new SourceEditor(el("result-editor"), true);
   private imageUrl?: string;
   private width = 600;
@@ -54,7 +57,13 @@ export class Results {
   constructor(
     private api: ApiClient,
     private fail: (e: unknown) => void,
-    private apply: (code: string) => void,
+    private apply: (code: string, skipConfirm?: boolean) => void,
+    private jumpToSource?: (
+      location: { offset?: number; line?: number; column?: number },
+      switchTab?: boolean,
+    ) => void,
+    private getSource?: () => string,
+    private applyAndRender?: (code: string) => void,
   ) {
     const tabs = [
       ...document.querySelectorAll<HTMLButtonElement>("[data-tab]"),
@@ -99,12 +108,184 @@ export class Results {
           this.fail(e);
         }
       };
-    el("zoom-fit").onclick = () => {
-      this.fit = true;
-      this.resize();
-    };
-    el("zoom-in").onclick = () => this.zoom(1.3);
-    el("zoom-out").onclick = () => this.zoom(1 / 1.3);
+
+    const canvasContainer = optEl("sysml-canvas-container");
+    if (canvasContainer) {
+      try {
+        this.canvasEngine = new SysMLCanvasEngine(canvasContainer, {
+          onSelect: (loc) => {
+            // Highlight source line if editor is split-visible, NEVER yank user away from Diagram tab!
+            if (loc) this.jumpToSource?.(loc, false);
+          },
+          getSource: () => this.getSource?.() || this.current?.result?.sysml_source || "",
+          applySource: (newSource, skipConfirm) => {
+            if (this.applyAndRender) {
+              this.applyAndRender(newSource);
+            } else {
+              this.apply(newSource, skipConfirm);
+            }
+          },
+          showNotice: (msg) => {
+            const noticeEl = optEl("notice-text");
+            if (noticeEl) {
+              noticeEl.textContent = msg;
+              const n = optEl("notice");
+              if (n) n.hidden = false;
+            }
+          },
+        });
+      } catch (err) {
+        console.warn("Canvas engine init skipped or failed:", err);
+      }
+    }
+
+    const togglePaletteBtn = optEl<HTMLButtonElement>("toggle-palette-btn");
+    if (togglePaletteBtn) {
+      togglePaletteBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.canvasEngine?.palette?.toggle();
+      };
+    }
+
+    const toggleLayersBtn = optEl<HTMLButtonElement>("toggle-layers-btn");
+    if (toggleLayersBtn) {
+      toggleLayersBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.canvasEngine?.layersPanel?.toggle();
+      };
+    }
+
+    // --- Milestone R3: Import & Export UI Handlers ---
+    const importBtn = optEl<HTMLButtonElement>("btn-import-diagram");
+    const importFileInput = optEl<HTMLInputElement>("diagram-file-input");
+    if (importBtn && importFileInput) {
+      importBtn.onclick = () => importFileInput.click();
+      importFileInput.onchange = () => {
+        const file = importFileInput.files?.[0];
+        if (file && this.canvasEngine) {
+          this.canvasEngine.handleImportFile(file).catch(this.fail);
+        }
+        importFileInput.value = "";
+      };
+    }
+
+    const exportMenuBtn = optEl<HTMLButtonElement>("btn-export-menu");
+    const exportPopover = optEl<HTMLElement>("export-menu-popover");
+    if (exportMenuBtn && exportPopover) {
+      exportMenuBtn.onclick = (e) => {
+        e.stopPropagation();
+        exportPopover.hidden = !exportPopover.hidden;
+        if (!exportPopover.hidden) {
+          const pPop = optEl("palette-menu-popover");
+          const lPop = optEl("layers-menu-popover");
+          if (pPop) pPop.hidden = true;
+          if (lPop) lPop.hidden = true;
+        }
+      };
+      document.addEventListener("click", (e) => {
+        if (!exportPopover.hidden && !exportPopover.contains(e.target as Node) && e.target !== exportMenuBtn) {
+          exportPopover.hidden = true;
+        }
+      });
+    }
+
+    const exportItems = document.querySelectorAll<HTMLButtonElement>(".export-menu-item");
+    for (const item of exportItems) {
+      item.onclick = async () => {
+        if (exportPopover) exportPopover.hidden = true;
+        if (!this.canvasEngine) return;
+
+        const type = item.dataset.export;
+        try {
+          if (type === "drawio") {
+            const drawio = this.canvasEngine.exportDrawio();
+            download(new Blob([drawio], { type: "application/vnd.jgraph.mxfile" }), "diagram.drawio");
+          } else if (type === "json") {
+            const json = this.canvasEngine.exportWorkbenchJson();
+            download(new Blob([json], { type: "application/json" }), "project.sysmlwb.json");
+          } else if (type === "sysml") {
+            const src = this.getSource?.() || this.current?.result?.sysml_source || "";
+            download(new Blob([src], { type: "text/plain" }), "model.sysml");
+          } else if (type === "svg") {
+            const svg = this.canvasEngine.exportSvg();
+            download(new Blob([svg], { type: "image/svg+xml" }), "diagram.svg");
+          } else if (type === "png-2x") {
+            const blob = await this.canvasEngine.exportPngBlob(2);
+            download(blob, "diagram-2x.png");
+          } else if (type === "png-4x") {
+            const blob = await this.canvasEngine.exportPngBlob(4);
+            download(blob, "diagram-4x.png");
+          }
+        } catch (err) {
+          this.fail(err);
+        }
+      };
+    }
+
+    const resetLayoutBtn = optEl<HTMLButtonElement>("reset-layout");
+    if (resetLayoutBtn) {
+      resetLayoutBtn.onclick = () => this.canvasEngine?.resetLayout();
+    }
+
+    const themeSelect = optEl<HTMLSelectElement>("canvas-theme-select");
+    if (themeSelect) {
+      themeSelect.onchange = () => {
+        this.canvasEngine?.setTheme(themeSelect.value as CanvasThemeId);
+      };
+    }
+
+    const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
+    for (const btn of viewTypeBtns) {
+      btn.onclick = () => {
+        const v = btn.dataset.view as ViewType;
+        if (this.canvasEngine && v) {
+          const ok = this.canvasEngine.switchView(v);
+          if (ok) {
+            viewTypeBtns.forEach((b) => {
+              b.classList.toggle("active", b === btn);
+              b.setAttribute("aria-selected", String(b === btn));
+            });
+            const summary = optEl("diagram-summary");
+            if (summary && this.current?.result?.diagram?.views?.[v]) {
+              const s = this.current.result.diagram.views[v].summary;
+              summary.textContent = `${s.displayedNodes} 节点 · ${s.displayedEdges} 连线`;
+            }
+          }
+        }
+      };
+    }
+
+    const zoomFitBtn = optEl<HTMLButtonElement>("zoom-fit");
+    if (zoomFitBtn) {
+      zoomFitBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomFit();
+        } else {
+          this.fit = true;
+          this.resize();
+        }
+      };
+    }
+    const zoomInBtn = optEl<HTMLButtonElement>("zoom-in");
+    if (zoomInBtn) {
+      zoomInBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomIn();
+        } else {
+          this.zoom(1.3);
+        }
+      };
+    }
+    const zoomOutBtn = optEl<HTMLButtonElement>("zoom-out");
+    if (zoomOutBtn) {
+      zoomOutBtn.onclick = () => {
+        if (this.canvasEngine && !optEl("sysml-canvas-container")?.hidden) {
+          this.canvasEngine.zoomOut();
+        } else {
+          this.zoom(1 / 1.3);
+        }
+      };
+    }
     const viewport = el("diagram-viewport");
     let dragging:
       | undefined
@@ -187,10 +368,17 @@ export class Results {
     this.imageUrl = undefined;
     el<HTMLImageElement>("diagram-image").removeAttribute("src");
     el("diagram-image").hidden = true;
-    if (!keepLoading) {
+
+    // Retain canvas if it already has a rendered diagram to prevent flickering (Milestone R4.2)
+    const hasPreviousCanvas = Boolean(this.canvasEngine?.hasRenderedView());
+    if (!keepLoading && !hasPreviousCanvas) {
       el("diagram-empty").hidden = false;
     }
-    el("diagram-viewport").classList.remove("has-diagram");
+    if (!hasPreviousCanvas) {
+      el("diagram-viewport").classList.remove("has-diagram");
+      this.showStaleBanner(false);
+    }
+
     for (const id of ["run-progress", "result-error", "stale-result"])
       el(id).hidden = true;
     for (const id of ["entities", "diagnostics", "timeline", "run-facts"]) {
@@ -235,11 +423,12 @@ export class Results {
     const resHash = optEl("result-hash");
     if (resHash) resHash.textContent = "";
   }
-  show(job: Run) {
+  show(job: Run, options: { silentCanvasSync?: boolean; currentDraftSource?: string } = {}) {
     const isJobActive = active(job.status);
-    if (this.current?.id !== job.id) this.reset(isJobActive);
+    const silent = Boolean(options.silentCanvasSync);
+    if (this.current?.id !== job.id && !silent) this.reset(isJobActive);
     this.current = job;
-    if (isJobActive) {
+    if (isJobActive && !silent) {
       const msg = phaseNames[job.phase] ? `正在${phaseNames[job.phase]}…` : "正在编译代码并生成架构拓扑…";
       this.setLoading(true, msg);
     }
@@ -292,6 +481,7 @@ export class Results {
     this.resultEditor.diagnostics(result.diagnostics || []);
     const qual = optEl("quality");
     const diagCount = result.diagnostics?.length || 0;
+    const namedEntityCount = (result.semantic_model?.entities || []).filter((e) => Boolean(e.name)).length;
     if (qual) {
       if (result.valid) {
         qual.className = "console-summary-card success";
@@ -299,13 +489,13 @@ export class Results {
           <div class="summary-left">
             <span class="summary-icon">✓</span>
             <div class="summary-text">
-              <div class="summary-title">模型编译与语法验证通过</div>
-              <div class="summary-sub">SysML v2 语义合规，拓扑分析就绪</div>
+              <div class="summary-title">SysML v2 模型语法与语义验证通过</div>
+              <div class="summary-sub">点击下方大纲中的任意元素可直接定位至对应源代码行</div>
             </div>
           </div>
           <div class="summary-badges">
-            <span class="console-pill success-pill">0 错误</span>
-            <span class="console-pill">${result.semantic_model?.entities.length || 0} 个实体</span>
+            <span class="console-pill success-pill">0 处错误</span>
+            <span class="console-pill">${namedEntityCount} 个命名元素</span>
           </div>
         `;
       } else {
@@ -314,8 +504,8 @@ export class Results {
           <div class="summary-left">
             <span class="summary-icon">✕</span>
             <div class="summary-text">
-              <div class="summary-title">发现语法或语义错误 (${diagCount} 处)</div>
-              <div class="summary-sub">请根据下方诊断信息定位或借助 AI 伴随助手自愈修复</div>
+              <div class="summary-title">编译检查发现 ${diagCount} 处语法或语义问题</div>
+              <div class="summary-sub">点击具体错误项可跳转至对应代码行，也可在右侧让 AI 助手一键自愈修复</div>
             </div>
           </div>
           <div class="summary-badges">
@@ -328,7 +518,7 @@ export class Results {
     if (resHash) resHash.textContent = result.final_artifact_sha256 ? `SHA-256 · ${result.final_artifact_sha256}` : "";
     const entityCountEl = optEl("entity-count");
     if (entityCountEl) {
-      entityCountEl.textContent = String(result.semantic_model?.entities.length || 0);
+      entityCountEl.textContent = String(namedEntityCount);
     }
     const diagCountEl = optEl("diagnostic-count");
     if (diagCountEl) {
@@ -377,45 +567,9 @@ export class Results {
         empty.className = "console-empty-box";
         empty.innerHTML = `
           <span class="empty-check">✓</span>
-          <span>未发现语法或语义错误，代码结构合规</span>
+          <span>未发现任何语法或语义错误</span>
         `;
         diagnostics.append(empty);
-      }
-    }
-    const facts = optEl("run-facts");
-    if (facts) {
-      facts.replaceChildren();
-      const tokens = (result.model_usage || []).reduce(
-        (sum, c) => sum + (c.usage?.total_tokens || 0),
-        0,
-      );
-      const items = [
-        [
-          "验证耗时",
-          result.validation_metadata?.duration_ms
-            ? `${(result.validation_metadata.duration_ms / 1000).toFixed(2)} 秒`
-            : "0.14 秒",
-        ],
-        ["模型用量", tokens ? `${tokens} tokens` : "本地规则验证"],
-        ["会话记忆", result.memory?.included ? "已引用近期上下文" : "未引用"],
-        [
-          "检索证据",
-          result.evidence?.status === "unavailable"
-            ? "暂无外部证据"
-            : `${result.evidence?.citations?.length || 0} 条来源`,
-        ],
-      ];
-      for (const [label, value] of items) {
-        const card = document.createElement("div");
-        card.className = "console-stat-card";
-        const lbl = document.createElement("span");
-        lbl.className = "stat-label";
-        lbl.textContent = label;
-        const val = document.createElement("span");
-        val.className = "stat-value";
-        val.textContent = value;
-        card.append(lbl, val);
-        facts.append(card);
       }
     }
     for (const button of document.querySelectorAll<HTMLButtonElement>(
@@ -434,52 +588,110 @@ export class Results {
     if (job.status === "failed") {
       this.setLoading(false);
     }
-    if (result.diagram?.svg) {
-      if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
-      this.imageUrl = URL.createObjectURL(
-        new Blob([result.diagram.svg], { type: "image/svg+xml" }),
-      );
-      const image = optEl<HTMLImageElement>("diagram-image");
-      if (image) {
-        image.src = this.imageUrl;
-        image.hidden = false;
-      }
+    if (result.diagram) {
+      this.showStaleBanner(false);
       this.setLoading(false);
       const diagEmpty = optEl("diagram-empty");
       if (diagEmpty) diagEmpty.hidden = true;
       const diagViewport = optEl("diagram-viewport");
       if (diagViewport) diagViewport.classList.add("has-diagram");
-      this.fit = true;
-      this.resize();
-      for (const id of ["zoom-in", "zoom-out", "zoom-fit"]) {
+
+      for (const id of ["zoom-in", "zoom-out", "zoom-fit", "reset-layout"]) {
         const zBtn = optEl<HTMLButtonElement>(id);
         if (zBtn) zBtn.disabled = false;
       }
-      const cov = result.diagram.coverage;
-      const diagSumm = optEl("diagram-summary");
-      if (diagSumm) {
-        diagSumm.textContent = cov
-          ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
-          : "";
+
+      if (result.diagram.view_ir && this.canvasEngine) {
+        const canvasContainer = optEl("sysml-canvas-container");
+        if (canvasContainer) canvasContainer.hidden = false;
+        const image = optEl<HTMLImageElement>("diagram-image");
+        if (image) image.hidden = true;
+
+        // If user already made newer edits in editor/canvas while background run was finishing, skip overwriting live canvas!
+        const draftMatchesResult =
+          !silent ||
+          options.currentDraftSource === undefined ||
+          options.currentDraftSource === result.sysml_source;
+
+        if (draftMatchesResult) {
+          this.canvasEngine.setScope(job.session_id || "default");
+          void this.canvasEngine.render(
+            result.diagram.view_ir,
+            result.diagram.views,
+            silent ? { preserveViewport: true, preserveDrillPath: true } : {},
+          );
+
+          const activeViewType = silent
+            ? this.canvasEngine.getCurrentViewType() || result.diagram.view_ir.viewType
+            : result.diagram.view_ir.viewType;
+          const summary =
+            result.diagram.views?.[activeViewType]?.summary || result.diagram.view_ir.summary;
+          const diagSumm = optEl("diagram-summary");
+          if (diagSumm) {
+            diagSumm.textContent = `${summary.displayedNodes} 节点 · ${summary.displayedEdges} 连线`;
+          }
+
+          if (!silent) {
+            const viewTypeBtns = document.querySelectorAll<HTMLButtonElement>(".view-type-btn");
+            viewTypeBtns.forEach((b) => {
+              const isActive = b.dataset.view === result.diagram?.view_ir?.viewType;
+              b.classList.toggle("active", isActive);
+              b.setAttribute("aria-selected", String(isActive));
+            });
+          }
+        }
+      } else if (result.diagram.svg) {
+        const canvasContainer = optEl("sysml-canvas-container");
+        if (canvasContainer) canvasContainer.hidden = true;
+        if (this.imageUrl) URL.revokeObjectURL(this.imageUrl);
+        this.imageUrl = URL.createObjectURL(
+          new Blob([result.diagram.svg], { type: "image/svg+xml" }),
+        );
+        const image = optEl<HTMLImageElement>("diagram-image");
+        if (image) {
+          image.src = this.imageUrl;
+          image.hidden = false;
+        }
+        this.fit = true;
+        this.resize();
+        const cov = result.diagram.coverage;
+        const diagSumm = optEl("diagram-summary");
+        if (diagSumm) {
+          diagSumm.textContent = cov
+            ? `${cov.displayed_entities} 个实体 · ${cov.displayed_relations} 条关系`
+            : "";
+        }
       }
-      const diagCov = optEl("diagram-coverage");
-      if (diagCov) {
-        diagCov.textContent = "";
+    } else if ((!result.valid || job.status === "failed") && this.canvasEngine?.hasRenderedView()) {
+      // Milestone R4.2: Retain previous valid snapshot on compile error & show stale overlay banner
+      this.setLoading(false);
+      const canvasContainer = optEl("sysml-canvas-container");
+      if (canvasContainer) canvasContainer.hidden = false;
+      const diagViewport = optEl("diagram-viewport");
+      if (diagViewport) diagViewport.classList.add("has-diagram");
+      const diagEmpty = optEl("diagram-empty");
+      if (diagEmpty) diagEmpty.hidden = true;
+      for (const id of ["zoom-in", "zoom-out", "zoom-fit", "reset-layout"]) {
+        const zBtn = optEl<HTMLButtonElement>(id);
+        if (zBtn) zBtn.disabled = false;
       }
+      this.showStaleBanner(true);
     }
   }
   private entities() {
     const searchInput = optEl<HTMLInputElement>("entity-search");
-    const query = searchInput ? searchInput.value.toLowerCase() : "";
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
     const list = optEl("entities");
     if (!list) return;
     list.replaceChildren();
     const values = (
       this.current?.result?.semantic_model?.entities || []
-    ).filter((e) =>
-      `${e.qualified_name || e.name || ""} ${e.kind}`
-        .toLowerCase()
-        .includes(query),
+    ).filter(
+      (e) =>
+        Boolean(e.name) &&
+        `${e.qualified_name || e.name || ""} ${e.kind}`
+          .toLowerCase()
+          .includes(query),
     );
     for (const entity of values) {
       const row = action(
@@ -488,11 +700,11 @@ export class Results {
         "entity-row",
       );
       row.append(
-        node("span", entity.kind, "entity-type"),
+        node("span", entity.kind.replace(/(Definition|Usage)$/, " $1"), "entity-type"),
         node("span", this.name(entity), "entity-name"),
         node(
           "span",
-          entity.location?.line ? `L${entity.location.line}` : "—",
+          entity.location?.line ? `第 ${entity.location.line} 行 →` : "定位 →",
           "entity-line",
         ),
       );
@@ -503,8 +715,8 @@ export class Results {
         node(
           "p",
           query
-            ? "没有匹配的实体。"
-            : "运行验证或实体提取后，将显示可追溯的模型元素。",
+            ? "未找到匹配的模型元素。"
+            : "点击【刷新视图】完成编译后，此处将列出所有包、定义、部件、端口与需求结构大纲。",
           "panel-footnote",
         ),
       );
@@ -513,8 +725,12 @@ export class Results {
     return entity.qualified_name || entity.name || "（匿名元素）";
   }
   private go(location: { offset?: number; line?: number; column?: number }) {
-    this.tab("code");
-    this.resultEditor.go(location);
+    if (this.jumpToSource) {
+      this.jumpToSource(location, true);
+    } else {
+      this.tab("code");
+      this.resultEditor.go(location);
+    }
   }
   elapsed() {
     if (!this.current) return;
@@ -541,5 +757,11 @@ export class Results {
     this.fit = false;
     this.width = Math.max(150, Math.min(6000, this.width * factor));
     this.resize();
+  }
+  public showStaleBanner(show: boolean) {
+    const banner = optEl("canvas-stale-banner");
+    if (banner) {
+      banner.hidden = !show;
+    }
   }
 }
