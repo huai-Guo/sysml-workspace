@@ -1,0 +1,116 @@
+{
+  "sysmbench_total": 151,
+  "sysmbench_pilot062_valid": 117,
+  "sysmbench_pilot062_invalid": 34,
+  "sysmbench_valid_difficulty": {
+    "simple": 13,
+    "medium": 59,
+    "complex": 45
+  },
+  "sysmbench_valid_grammar_tags": {
+    "part_def": 80,
+    "part_usage": 65,
+    "attribute": 75,
+    "port": 18,
+    "connection": 19,
+    "flow": 22,
+    "action": 38,
+    "conjugated_port": 3,
+    "state_machine": 11,
+    "requirement": 13,
+    "constraint": 18,
+    "general_structure": 2
+  },
+  "sysmbench_top_fail_reasons": [
+    [
+      "Must invoke a behavior or a behavioral feature",
+      11
+    ],
+    [
+      "Must be an accessible feature (use dot notation for nesting)",
+      5
+    ],
+    [
+      "Subject must be first parameter.",
+      4
+    ],
+    [
+      "missing 'to' at '['",
+      2
+    ],
+    [
+      "no viable alternative at input 'vehicle1_c1'",
+      1
+    ],
+    [
+      "Couldn't resolve reference to Namespace ''3a-Function-based Behavior-1''",
+      1
+    ],
+    [
+      "Must be a valid feature",
+      1
+    ],
+    [
+      "Only one subject is allowed.",
+      1
+    ]
+  ],
+  "split1_candidates_total_admitted": 94,
+  "split1_by_source": {
+    "SRC-04_examples": {
+      "raw_files": 96,
+      "dropped_overlap_sysmbench": 9,
+      "dropped_internal_dup": 3,
+      "dropped_too_short_or_long": 1,
+      "admitted_standalone": 74,
+      "admitted_with_dep_bundle": 8,
+      "failed_pilot_062": 1
+    },
+    "SRC-04_training": {
+      "raw_files": 100,
+      "dropped_overlap_sysmbench": 98,
+      "dropped_internal_dup": 0,
+      "dropped_too_short_or_long": 0,
+      "admitted_standalone": 2,
+      "admitted_with_dep_bundle": 0,
+      "failed_pilot_062": 0
+    },
+    "SRC-04_validation": {
+      "raw_files": 56,
+      "dropped_overlap_sysmbench": 52,
+      "dropped_internal_dup": 0,
+      "dropped_too_short_or_long": 0,
+      "admitted_standalone": 2,
+      "admitted_with_dep_bundle": 0,
+      "failed_pilot_062": 2
+    },
+    "SRC-05_models": {
+      "raw_files": 36,
+      "dropped_overlap_sysmbench": 0,
+      "dropped_internal_dup": 0,
+      "dropped_too_short_or_long": 0,
+      "admitted_standalone": 8,
+      "admitted_with_dep_bundle": 0,
+      "failed_pilot_062": 28
+    }
+  },
+  "split1_difficulty": {
+    "complex": 40,
+    "medium": 45,
+    "simple": 9
+  },
+  "split1_grammar_tags": {
+    "part_def": 64,
+    "part_usage": 66,
+    "connection": 25,
+    "action": 30,
+    "constraint": 11,
+    "attribute": 48,
+    "port": 21,
+    "conjugated_port": 14,
+    "requirement": 14,
+    "state_machine": 10,
+    "general_structure": 3,
+    "flow": 17
+  }
+}

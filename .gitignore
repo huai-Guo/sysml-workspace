@@ -59,4 +59,6 @@ deploy/.env
 .tools/
 */.tools/
 *.zip
+research/data/raw/
+research/data/interim/
 

@@ -1,0 +1,61 @@
+{
+  "generated_at_utc": "2026-11-26T03:44:19.851427+00:00",
+  "validator": {
+    "name": "omg-sysml-v2-pilot",
+    "version": "0.62.0",
+    "tag": "2026-08"
+  },
+  "sources": {
+    "SRC-01": {
+      "name": "SysMBench (PKU et al., arXiv:2508.03215, 2025)",
+      "role": "split2a_blind_external_test",
+      "license": "Academic benchmark (upstream mirror in cmuchancel/Generate-Compile-Repair-SysMLv2)",
+      "local_dir": "research/data/raw/src01_02_cmu_gcr_sysmbench/sysmbench_original_upstream/dataset/sysml",
+      "remote_url": "https://github.com/cmuchancel/Generate-Compile-Repair-SysMLv2.git",
+      "commit_sha": "857448344695cff18e584b685fa211ba9c904b6e",
+      "commit_short": "8574483",
+      "commit_date": "2026-03-13 13:55:56 -0400"
+    },
+    "SRC-04": {
+      "name": "OMG SysML-v2-Release Official Corpus",
+      "role": "split1_dev_diagnostic_primary (strictly Jaccard < 0.50 disjoint from SRC-01)",
+      "license": "EPL-2.0",
+      "local_dir": "research/data/raw/src04_omg_sysml_v2_release/sysml/src",
+      "remote_url": "https://github.com/Systems-Modeling/SysML-v2-Release.git",
+      "commit_sha": "9546486f49f704d1df092e3f252f4fcfbce534dd",
+      "commit_short": "9546486",
+      "commit_date": "2026-10-28 17:54:12 -0400"
+    },
+    "SRC-05": {
+      "name": "GfSE/SysML-v2-Models (INCOSE German Chapter)",
+      "role": "split1_dev_diagnostic_engineering",
+      "license": "Apache-2.0 / Open-Source (see repo LICENSE)",
+      "local_dir": "research/data/raw/src05_gfse_models/models",
+      "remote_url": "https://github.com/GfSE/SysML-v2-Models.git",
+      "commit_sha": "ebbb0c39f4813b059e0bf14270ec58618aa012ca",
+      "commit_short": "ebbb0c3",
+      "commit_date": "2025-06-04 11:26:44 +0200"
+    }
+  },
+  "excluded_sources": [
+    {
+      "id": "SRC-03",
+      "repo": "yasminebouamra/SysMLv2-Benchmark",
+      "reason": "239/243 (98.4%) .sysml files are near-duplicates of SRC-04 OMG SysML-v2-Release; prompts contain empty files and syntax-leaking code summaries."
+    },
+    {
+      "id": "SRC-02-ctx",
+      "repo": "cmuchancel/Generate-Compile-Repair-SysMLv2 (ai_agent/context_examples & api_loop/nl_prompts)",
+      "reason": "100% exact subset of SRC-01 SysMBench."
+    },
+    {
+      "id": "HF-QA-V1",
+      "repos": [
+        "nomograph/sysml-v2-reasoning-benchmark",
+        "Xizhidian/sysmlv2",
+        "ardalon/semaadb-dataset"
+      ],
+      "reason": "Non-matching tasks (model comprehension QA, Chinese PDF QA, PlantUML/SysML v1)."
+    }
+  ]
+}
